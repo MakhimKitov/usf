@@ -1,6 +1,6 @@
 # Reference egress policy for burst pods (G6, TO-BE §6 "Network walls").
 #
-# The platform declares every burst's egress as data — the `autonomous-dev/egress`
+# The platform declares every burst's egress as data — the `usf/egress`
 # annotation on the Job and its pod (control_plane/egress.py) — and enforcement
 # is the adopter's CNI. This is that declaration's platform-wide half written for
 # one FQDN-capable CNI, as an example: the M4 rig (`scripts/burst-cluster.sh

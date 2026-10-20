@@ -49,7 +49,7 @@ The experiment tests three things at once. Each maps to a metric family (§9):
 
 | Component | Repo | Lifecycle | Identity / blast radius |
 |---|---|---|---|
-| **Control plane** (scheduler) | platform repo (`autonomous-dev`) | long-lived | spawns Docker containers, holds run state |
+| **Control plane** (scheduler) | platform repo (`usf`) | long-lived | spawns Docker containers, holds run state |
 | **Dev agent** (the developer) | same platform repo (payload image) | ephemeral, per-issue | GitHub App scoped to product repo: `contents`+`pull_requests` write, **no merge/admin/secrets** |
 | **Tester** (QA) | same platform repo (**same image**, different contract) | ephemeral, per test-burst | **no GitHub credential** (as built — the report returns via harvest and the control plane posts it as the reviewer App; a dedicated tester App is deferred) · **product-sandbox creds** (`TEST_*` intersection, which the dev never has) |
 | **Monitor** | **separate** repo | long-lived | telemetry-read + `issues:write` only |

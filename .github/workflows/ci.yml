@@ -37,9 +37,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: the control-plane image
-        run: docker build -f docker/control-plane/Dockerfile -t autonomous-dev/control-plane:latest .
+        run: docker build -f docker/control-plane/Dockerfile -t usf/control-plane:latest .
       - name: the webhook-receiver image
-        run: docker build -f docker/webhook-receiver/Dockerfile -t autonomous-dev/webhook-receiver:latest .
+        run: docker build -f docker/webhook-receiver/Dockerfile -t usf/webhook-receiver:latest .
       - name: the receiver image is an HMAC filter and nothing else
         # TO-BE §5: no control-plane code, no ledger client, no GitHub client, no
         # git, no docker behind the public route. Every module in the list must
@@ -47,7 +47,7 @@ jobs:
         # command); the receiver itself must import, as a non-root user.
         run: |
           set -e
-          img=autonomous-dev/webhook-receiver:latest
+          img=usf/webhook-receiver:latest
           for banned in control_plane dev_agent psycopg boto3 jwt requests; do
             if docker run --rm --entrypoint python "$img" -c "import $banned" 2>/dev/null; then
               echo "::error::the receiver image can import $banned — the public process is no longer just an HMAC filter"
@@ -63,13 +63,13 @@ jobs:
         # The thing every burst actually is. It was unbuildable from a clean
         # checkout for a while and nothing noticed, because nothing built it —
         # this step is that gap closed.
-        run: docker build -f docker/dev-agent/Dockerfile -t autonomous-dev/dev-agent:latest .
+        run: docker build -f docker/dev-agent/Dockerfile -t usf/dev-agent:latest .
       - name: the burst image carries no control-plane code
         # ARCHITECTURE.md §8 and CLAUDE.md's layout rule: the worker ships alone.
         # A burst that could import the control plane could reach the ledger.
         run: |
           set -e
-          img=autonomous-dev/dev-agent:latest
+          img=usf/dev-agent:latest
           for banned in control_plane psycopg boto3; do
             if docker run --rm --entrypoint python "$img" -c "import $banned" 2>/dev/null; then
               echo "::error::the dev-agent image can import $banned — a burst must not carry it"
@@ -79,7 +79,7 @@ jobs:
           docker run --rm --entrypoint python "$img" -c "import dev_agent.cli, session_volume"
           test "$(docker run --rm --entrypoint id "$img" -u)" = "1000"
       - name: the burst-phases image
-        run: docker build -f docker/burst-phases/Dockerfile -t autonomous-dev/burst-phases:latest .
+        run: docker build -f docker/burst-phases/Dockerfile -t usf/burst-phases:latest .
       - name: the phases image holds capabilities, never credentials
         # TO-BE §6, G2: what runs beside a burst cannot reach a ledger or a
         # store. No control-plane code, no ledger client, no cloud SDK — the
@@ -87,7 +87,7 @@ jobs:
         # init clones the product with a contents:read, single-repo token.
         run: |
           set -e
-          img=autonomous-dev/burst-phases:latest
+          img=usf/burst-phases:latest
           for banned in control_plane dev_agent psycopg boto3 structlog; do
             if docker run --rm --entrypoint python "$img" -c "import $banned" 2>/dev/null; then
               echo "::error::the phases image can import $banned — a pod must not carry it"
@@ -103,8 +103,8 @@ jobs:
           fi
       - name: the control-plane image runs the CLI
         run: |
-          docker run --rm autonomous-dev/control-plane:latest --help >/dev/null
-          docker run --rm --entrypoint sh autonomous-dev/control-plane:latest -c "docker --version && git --version && kubectl version --client=true"
+          docker run --rm usf/control-plane:latest --help >/dev/null
+          docker run --rm --entrypoint sh usf/control-plane:latest -c "docker --version && git --version && kubectl version --client=true"
       - name: the reference k8s manifests are valid
         # kubeconform, pinned, from its image — no cluster, no kubectl; the
         # manifests are examples (TO-BE §5) and this is what keeps them from rotting.
@@ -120,8 +120,8 @@ jobs:
     env:
       KIND_VERSION: v0.31.0
       BURST_NAMESPACE: bursts
-      BURST_PHASES_IMAGE: autonomous-dev/burst-phases:latest
-      BURST_AGENT_IMAGE: autonomous-dev/dev-agent:latest
+      BURST_PHASES_IMAGE: usf/burst-phases:latest
+      BURST_AGENT_IMAGE: usf/dev-agent:latest
       BURST_REPLAY_RUNTIMES: default,gvisor
     steps:
       - uses: actions/checkout@v4

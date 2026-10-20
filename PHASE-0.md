@@ -57,7 +57,7 @@ Per `GITHUB-INTERFACE.md`:
 ## Milestones
 
 **M0 — Infra + skeleton.**
-Stand up the sandbox org, target repo, dev App, branch protection. Rework `autonomous-dev`
+Stand up the sandbox org, target repo, dev App, branch protection. Rework `usf`
 into the `control-plane` / `dev-agent` module seam (§12). Write the dev-agent **Dockerfile**
 (warm base: toolchain + deps + `claude` CLI + the operating contract).
 → *Exit:* `docker run` boots an agent in a clone; `uv run pytest` green.

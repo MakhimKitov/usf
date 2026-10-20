@@ -41,7 +41,7 @@ focused on the PR's diff.
 ```
 
 `egress` is optional and names hosts, never patterns or addresses: the tester burst's
-egress declaration (`control_plane/egress.py`, the `autonomous-dev/egress` annotation on
+egress declaration (`control_plane/egress.py`, the `usf/egress` annotation on
 its Job) carries them beside the platform's own, and an adopter's CNI policy is built
 from that declaration. A dev or reviewer burst never declares them.
 

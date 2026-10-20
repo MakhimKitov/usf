@@ -20,14 +20,14 @@
 #
 #   # docker/.env (compose's interpolation file — pin the two paths there, not in
 #   # the shell: an `up` from a shell without them recreates the replicas onto the defaults)
-#   PLATFORM_DATA=/srv/autonomous-dev/data        # absolute; see control-plane below
-#   PLATFORM_SECRETS=/srv/autonomous-dev/secrets  # the App keys .env's *_PRIVATE_KEY_PATH name
+#   PLATFORM_DATA=/srv/usf/data        # absolute; see control-plane below
+#   PLATFORM_SECRETS=/srv/usf/secrets  # the App keys .env's *_PRIVATE_KEY_PATH name
 #
 #   docker compose -f docker/compose.yaml --profile platform up -d --build --wait
 #
 # Off by default, so `up` without the profile is still just the stores.
 
-name: autonomous-dev-rig
+name: usf-rig
 
 services:
   postgres:
@@ -78,7 +78,7 @@ services:
   migrate:
     # Runs once, as the schema owner, before any replica starts: `migrate` is
     # platform_admin's verb and the replicas connect as platform_app (STORES.md).
-    image: autonomous-dev/control-plane:latest
+    image: usf/control-plane:latest
     build:
       context: ..
       dockerfile: docker/control-plane/Dockerfile
@@ -91,7 +91,7 @@ services:
         condition: service_healthy
 
   control-plane:
-    image: autonomous-dev/control-plane:latest
+    image: usf/control-plane:latest
     build:
       context: ..
       dockerfile: docker/control-plane/Dockerfile
@@ -116,13 +116,13 @@ services:
       # Stage G), which reads bind-mount paths in *its* namespace — so the data
       # dir is mounted at the same absolute path inside the replica as on the host
       - /var/run/docker.sock:/var/run/docker.sock
-      - ${PLATFORM_DATA:-/srv/autonomous-dev/data}:${PLATFORM_DATA:-/srv/autonomous-dev/data}
+      - ${PLATFORM_DATA:-/srv/usf/data}:${PLATFORM_DATA:-/srv/usf/data}
       # the App private keys: .env names them by path (*_PRIVATE_KEY_PATH, file:
       # refs), and a path has to mean the same file on the host and in the replica
       # — same-path again, read-only. Never under PLATFORM_DATA: bursts are handed
       # mounts out of that tree.
-      - ${PLATFORM_SECRETS:-/srv/autonomous-dev/secrets}:${PLATFORM_SECRETS:-/srv/autonomous-dev/secrets}:ro
-    command: ["run", "--data-dir", "${PLATFORM_DATA:-/srv/autonomous-dev/data}", "--interval", "${SCHEDULER_POLL_INTERVAL_S:-60}"]
+      - ${PLATFORM_SECRETS:-/srv/usf/secrets}:${PLATFORM_SECRETS:-/srv/usf/secrets}:ro
+    command: ["run", "--data-dir", "${PLATFORM_DATA:-/srv/usf/data}", "--interval", "${SCHEDULER_POLL_INTERVAL_S:-60}"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/healthz', timeout=2)"]
       interval: 5s
@@ -137,7 +137,7 @@ services:
   webhook-receiver:
     # The one public surface. TLS terminates in front of this (E6's HTTPS route);
     # here the port is published plain for the rehearsal.
-    image: autonomous-dev/webhook-receiver:latest
+    image: usf/webhook-receiver:latest
     build:
       context: ..
       dockerfile: docker/webhook-receiver/Dockerfile
@@ -168,7 +168,7 @@ services:
     # Built, never run: bursts are `docker run` by the replicas against the host's
     # daemon (DockerRunner), so this image only has to *exist* there — zero replicas
     # makes `up --build` build it next to the other two and start nothing.
-    image: autonomous-dev/dev-agent:latest
+    image: usf/dev-agent:latest
     build:
       context: ..
       dockerfile: docker/dev-agent/Dockerfile

@@ -35,8 +35,8 @@ is driven, and how the E6 gate is rehearsed. Everything the platform *is* stays 
    pin them there, not in the shell: a later `up` from a shell without them
    recreates the replicas onto the defaults):
    ```
-   PLATFORM_DATA=/srv/autonomous-dev/data        # clones, sessions — same path on host and in the replica
-   PLATFORM_SECRETS=/srv/autonomous-dev/secrets  # the App private keys, read-only, same path
+   PLATFORM_DATA=/srv/usf/data        # clones, sessions — same path on host and in the replica
+   PLATFORM_SECRETS=/srv/usf/secrets  # the App private keys, read-only, same path
    ```
    Both are same-path mounts: bursts get bind mounts out of the data dir in the
    *host daemon's* namespace, and `.env` names the keys by path
@@ -129,7 +129,7 @@ What the cluster has to have:
   handing a pod a directory it cannot see.
 - the two images reachable from the nodes: the dev-agent image (what the burst
   is) and the phases image (`BURST_PHASES_IMAGE`, default
-  `autonomous-dev/burst-phases:latest`). Both are pulled `IfNotPresent`, so a
+  `usf/burst-phases:latest`). Both are pulled `IfNotPresent`, so a
   node that already holds them never goes looking for a registry.
 - the archive reachable **from the pods, at the same address the control plane
   signs with**. A presigned URL is signed over its Host header: one name, both

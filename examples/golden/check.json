@@ -1,7 +1,7 @@
 {
   "name": "check",
   "task_id": "MakhimKitov/discord-bot#0",
-  "image": "autonomous-dev/dev-agent:latest",
+  "image": "usf/dev-agent:latest",
   "command": "check",
   "node": {"seed": "check-node"},
   "resume_session_id": "golden-check-session",

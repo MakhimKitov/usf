@@ -405,7 +405,7 @@ per-task state machines, run bursts. What changes is where and how much at once.
   Reference FQDN policies ship as examples; enforcement belongs to the
   adopter's CNI (capabilities, not instruments), and the M4 suite validates
   it on *their* cluster: a request to an undeclared host must fail there,
-  not in our docs. *Built (G6):* the `autonomous-dev/egress` annotation on
+  not in our docs. *Built (G6):* the `usf/egress` annotation on
   every Job and pod (`control_plane/egress.py`), a reference policy in
   `examples/egress/`, and `dev-agent walls` — the M4 probes, replayed through
   the G4 harness on Cilium in CI; a breach fails the build.

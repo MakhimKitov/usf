@@ -12,7 +12,7 @@
 # out, which docker/compose.yaml's `platform` profile does. `JobsRunner` (G3)
 # needs `kubectl` and a kubeconfig or an in-cluster service account.
 #
-# Build (repo root): docker build -f docker/control-plane/Dockerfile -t autonomous-dev/control-plane:latest .
+# Build (repo root): docker build -f docker/control-plane/Dockerfile -t usf/control-plane:latest .
 
 FROM python:3.12-slim AS build
 
@@ -58,6 +58,6 @@ ENV PATH="/app/.venv/bin:${PATH}"
 
 # Root, on purpose and for now: the daemon socket a deployment mounts is
 # root-owned on most hosts. The replica holds the App keys as refs either way.
-WORKDIR /srv/autonomous-dev
+WORKDIR /srv/usf
 ENTRYPOINT ["control-plane"]
 CMD ["run", "--help"]

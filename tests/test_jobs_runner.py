@@ -178,8 +178,8 @@ def test_the_working_tree_is_a_directory_the_clone_owns(runner):
 def test_the_phases_run_the_platforms_image_and_the_burst_runs_its_own(runner):
     """What the burst may import is checked by building two images; the pod is
     where that separation either holds or quietly stops mattering."""
-    job = manifest(runner, _spec(image="autonomous-dev/dev-agent:v9"))
-    assert container(job, "agent")["image"] == "autonomous-dev/dev-agent:v9"
+    job = manifest(runner, _spec(image="usf/dev-agent:v9"))
+    assert container(job, "agent")["image"] == "usf/dev-agent:v9"
     assert container(job, "init")["image"] == DEFAULT_PHASES_IMAGE
     assert container(job, "harvest")["image"] == DEFAULT_PHASES_IMAGE
     # and a node that already holds them does not go looking for a registry: a
@@ -195,7 +195,7 @@ def test_the_job_is_named_after_the_burst_and_says_which_task(runner):
     assert job["metadata"]["name"] == job_name(BURST) == "burst-b1"
     # a task id carries '/' and '#', which no label value may, and it is the one
     # thing a human looking at a stuck pod wants
-    assert job["metadata"]["annotations"]["autonomous-dev/task"] == TASK
+    assert job["metadata"]["annotations"]["usf/task"] == TASK
     assert job["metadata"]["labels"]["burst"] == BURST
 
 

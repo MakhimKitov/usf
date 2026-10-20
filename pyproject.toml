@@ -1,5 +1,5 @@
 [project]
-name = "autonomous-dev"
+name = "usf"
 version = "0.1.0"
 description = "Autonomous maintenance platform: control plane + the dev-agent image it runs."
 readme = "README.md"

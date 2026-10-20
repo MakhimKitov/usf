@@ -8,7 +8,7 @@
 # RECEIVER_BIND. The webhook secrets are refs — env:/file:/helper: — so a
 # deployment mounts a file or sets a variable, and the image holds nothing.
 #
-# Build (repo root): docker build -f docker/webhook-receiver/Dockerfile -t autonomous-dev/webhook-receiver:latest .
+# Build (repo root): docker build -f docker/webhook-receiver/Dockerfile -t usf/webhook-receiver:latest .
 
 FROM python:3.12-slim AS build
 
