@@ -1,4 +1,4 @@
-# autonomous-dev — the platform
+# usf — the platform
 
 This repo is the **platform** in the autonomous-maintenance experiment: the **control
 plane** (scheduler) plus the **dev-agent** image it runs. The dev agent maintains a
@@ -38,7 +38,7 @@ it, never the reverse.
 
 ```bash
 # Build the dev-agent image
-docker build -f docker/dev-agent/Dockerfile -t autonomous-dev/dev-agent:latest .
+docker build -f docker/dev-agent/Dockerfile -t usf/dev-agent:latest .
 
 # Boot smoke (no network, no key): container check in a clone
 uv run control-plane burst --issue 1 --repo ../discord-bot --mode check --data-dir data
@@ -685,7 +685,7 @@ Kata is not on that list because a kind node has no nested virtualization; the
 bake-off proper is G5's, on hardware.
 
 **Egress as data, M4 as a number (G6)**: every Job and its pod carry
-`autonomous-dev/egress` — JSON entries `{host, port, why}` from
+`usf/egress` — JSON entries `{host, port, why}` from
 `control_plane/egress.py`: GitHub; on `run` the inference API and the uv
 toolchain's index; the archive's host (from the minted URLs); the OTLP endpoint;
 and for a tester only, `TESTING.md`'s new `egress:` hosts (`BurstSpec.egress`).

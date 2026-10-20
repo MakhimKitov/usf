@@ -33,7 +33,7 @@
 # `up` starts empty. A rig that accumulates history is a store, and the store this
 # platform has is the ledger.
 
-name: autonomous-dev-telemetry
+name: usf-telemetry
 
 services:
   otel-collector:

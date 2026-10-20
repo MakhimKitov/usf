@@ -215,7 +215,7 @@ def test_command_shape(monkeypatch):
     monkeypatch.delenv(agentenv.ANTHROPIC_API_KEY, raising=False)
     cmd = DockerRunner().build_command(_spec())
     assert cmd[:5] == ["docker", "run", "--rm", "--name", "burst-b1"]  # the name kill and ps go by
-    assert cmd[-2:] == ["autonomous-dev/dev-agent:latest", "run"]
+    assert cmd[-2:] == ["usf/dev-agent:latest", "run"]
     assert f"/data/volumes/b1:{agentenv.CONTAINER_SESSION_DIR}" in cmd
     assert f"/clones/product:{agentenv.CONTAINER_REPO_DIR}" in cmd
 
@@ -320,4 +320,4 @@ def test_a_runtime_is_docker_runs_own_flag_and_absent_by_default():
     assert "--runtime" not in DockerRunner().build_command(_spec())
     cmd = DockerRunner().build_command(_spec(runtime_class="runsc"))
     assert cmd[cmd.index("--runtime") + 1] == "runsc"
-    assert cmd.index("--runtime") < cmd.index("autonomous-dev/dev-agent:latest")
+    assert cmd.index("--runtime") < cmd.index("usf/dev-agent:latest")

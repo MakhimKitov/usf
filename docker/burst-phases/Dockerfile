@@ -17,7 +17,7 @@
 # BURST_SESSION_GET_URL + BURST_SESSION_SHA256, BURST_SESSION_PUT_URL +
 # BURST_SESSION_KEY, BURST_ARTIFACTS_PUT_URL, and the clone's four.
 #
-# Build (repo root): docker build -f docker/burst-phases/Dockerfile -t autonomous-dev/burst-phases:latest .
+# Build (repo root): docker build -f docker/burst-phases/Dockerfile -t usf/burst-phases:latest .
 
 FROM python:3.12-slim AS build
 

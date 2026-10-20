@@ -33,7 +33,7 @@ from dev_agent import env as agentenv
 from control_plane.runner import BurstSpec, burst_env
 
 # The annotation a Job carries its declaration under — JSON, a list of entries.
-EGRESS_ANNOTATION = "autonomous-dev/egress"
+EGRESS_ANNOTATION = "usf/egress"
 
 GITHUB_HOSTS = ("github.com", "api.github.com")
 INFERENCE_HOST = "api.anthropic.com"

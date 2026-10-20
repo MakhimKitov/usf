@@ -23,7 +23,7 @@ stringData:
   # The dev App (D1): id + private key. The key variable is a secret ref (D4):
   # here a file: ref onto the key mounted from this same Secret.
   GITHUB_APP_ID: "REPLACE_ME"
-  GITHUB_APP_PRIVATE_KEY_PATH: "file:/etc/autonomous-dev/keys/github-app.pem"
+  GITHUB_APP_PRIVATE_KEY_PATH: "file:/etc/usf/keys/github-app.pem"
   github-app.pem: |
     REPLACE_ME
 ---
@@ -46,8 +46,8 @@ spec:
       automountServiceAccountToken: false # no k8s API from a replica — an absence of credential, not a policy
       containers:
         - name: control-plane
-          image: autonomous-dev/control-plane:latest
-          args: ["run", "--data-dir", "/var/lib/autonomous-dev", "--interval", "$(SCHEDULER_POLL_INTERVAL_S)"]
+          image: usf/control-plane:latest
+          args: ["run", "--data-dir", "/var/lib/usf", "--interval", "$(SCHEDULER_POLL_INTERVAL_S)"]
           envFrom:
             - configMapRef:
                 name: control-plane
@@ -68,9 +68,9 @@ spec:
             periodSeconds: 15
           volumeMounts:
             - name: data
-              mountPath: /var/lib/autonomous-dev
+              mountPath: /var/lib/usf
             - name: keys
-              mountPath: /etc/autonomous-dev/keys
+              mountPath: /etc/usf/keys
               readOnly: true
           resources:
             requests:

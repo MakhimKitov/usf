@@ -3,7 +3,7 @@
   "title": "Reporting — the ledger's own numbers",
   "description": "Reference panels over the reporting views (B4, #22). An example, not a component: the SQL is examples/dashboards/reporting.sql, which any Postgres tool can run.",
   "tags": [
-    "autonomous-dev",
+    "usf",
     "reporting"
   ],
   "editable": true,

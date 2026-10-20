@@ -70,7 +70,7 @@ log = structlog.get_logger()
 # (`BurstSpec.image`); this one is the platform's, and the two are never the
 # same image — that separation is what makes "the burst cannot import the
 # control plane" checkable.
-DEFAULT_PHASES_IMAGE = "autonomous-dev/burst-phases:latest"
+DEFAULT_PHASES_IMAGE = "usf/burst-phases:latest"
 
 # A burst's images are pinned by the deployment — the agent's by the spec, the
 # phases' by this module — so the tag is the decision and re-pulling it every
@@ -220,7 +220,7 @@ class JobsRunner:
                 "labels": {"app": "burst", "burst": spec.burst_id, "role": spec.role},
                 # the task id carries '/' and '#', which no label value may — and
                 # it is the one thing a human looking at a stuck pod wants
-                "annotations": {"autonomous-dev/task": spec.task_id, **egress_annotation},
+                "annotations": {"usf/task": spec.task_id, **egress_annotation},
             },
             "spec": {
                 # one burst, one attempt: a retry is the scheduler's decision,

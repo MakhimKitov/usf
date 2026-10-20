@@ -1,4 +1,4 @@
-# autonomous-dev
+# usf (ultimate slop factory)
 
 The **platform** in an autonomous-maintenance experiment: a control plane plus a
 dev-agent image that maintains a *product* repo — any codebase, passed as a parameter
@@ -17,7 +17,7 @@ uv sync
 cp .env.example .env   # add CLAUDE_CODE_OAUTH_TOKEN (from `claude setup-token`)
 
 # Build the dev-agent image, then drive one burst by hand:
-docker build -f docker/dev-agent/Dockerfile -t autonomous-dev/dev-agent:latest .
+docker build -f docker/dev-agent/Dockerfile -t usf/dev-agent:latest .
 uv run control-plane burst --issue 1 --repo ../discord-bot --mode check --data-dir data
 
 uv run pytest          # structural tests, no network

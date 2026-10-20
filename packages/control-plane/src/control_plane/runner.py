@@ -38,7 +38,7 @@ from control_plane.volume import (
 
 log = structlog.get_logger()
 
-DEFAULT_IMAGE = "autonomous-dev/dev-agent:latest"
+DEFAULT_IMAGE = "usf/dev-agent:latest"
 
 # The one variable that decides where bursts run (`open_runner`). Named here
 # rather than in `jobs`, because the toggle belongs to the seam, not to one side

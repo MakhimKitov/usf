@@ -6,7 +6,7 @@
 #   - non-root user; no credentials of any kind in the image
 #   - CLAUDE_CONFIG_DIR is the /session mount the control plane owns
 #
-# Build (repo root): docker build -f docker/dev-agent/Dockerfile -t autonomous-dev/dev-agent:latest .
+# Build (repo root): docker build -f docker/dev-agent/Dockerfile -t usf/dev-agent:latest .
 
 FROM python:3.12-slim AS build
 

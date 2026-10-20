@@ -23,10 +23,10 @@
 #     shell script), so the cluster needs exactly one artifact.
 set -euo pipefail
 
-CLUSTER="${BURST_CLUSTER:-autonomous-dev}"
+CLUSTER="${BURST_CLUSTER:-usf}"
 NAMESPACE="${BURST_NAMESPACE:-bursts}"
 BUCKET="${BURST_BUCKET:-burst-cluster}"
-PHASES_IMAGE="${BURST_PHASES_IMAGE:-autonomous-dev/burst-phases:latest}"
+PHASES_IMAGE="${BURST_PHASES_IMAGE:-usf/burst-phases:latest}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # The golden replay's second runtime (G4): gVisor, pinned and checksummed. It is
 # the candidate a kind node can carry — Kata wants nested virtualization, which

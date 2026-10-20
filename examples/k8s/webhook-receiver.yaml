@@ -34,10 +34,10 @@ spec:
         runAsUser: 1000
       containers:
         - name: webhook-receiver
-          image: autonomous-dev/webhook-receiver:latest
+          image: usf/webhook-receiver:latest
           env:
             - name: WEBHOOK_APPS
-              value: "REPLACE_ME_APP_ID=file:/etc/autonomous-dev/webhooks/dev"
+              value: "REPLACE_ME_APP_ID=file:/etc/usf/webhooks/dev"
             - name: WAKE_URL
               value: "http://control-plane:8081"
             - name: RECEIVER_BIND
@@ -52,7 +52,7 @@ spec:
             periodSeconds: 5
           volumeMounts:
             - name: webhooks
-              mountPath: /etc/autonomous-dev/webhooks
+              mountPath: /etc/usf/webhooks
               readOnly: true
           securityContext:
             allowPrivilegeEscalation: false

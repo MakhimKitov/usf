@@ -62,7 +62,7 @@ def _fixture(tmp_path, **fields) -> Path:
     raw = {
         "name": "check",
         "task_id": TASK,
-        "image": "autonomous-dev/dev-agent:latest",
+        "image": "usf/dev-agent:latest",
         "command": "check",
         "node": {"seed": "node"},
         "resume_session_id": "sess-1",
