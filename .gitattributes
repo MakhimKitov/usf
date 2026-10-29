@@ -1,0 +1,4 @@
+# LF in every checkout, whatever its core.autocrlf. The tree's scripts are
+# copied into Linux images, and Git for Windows checks out with CRLF by default:
+# `#!/bin/sh\r` is then an interpreter the image does not have.
+* text=auto eol=lf
