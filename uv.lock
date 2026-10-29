@@ -273,6 +273,7 @@ version = "0.1.0"
 source = { editable = "packages/control-plane" }
 dependencies = [
     { name = "boto3" },
+    { name = "burst-phases" },
     { name = "cryptography" },
     { name = "dev-agent" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
@@ -289,6 +290,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "boto3", specifier = ">=1.35" },
+    { name = "burst-phases", editable = "packages/burst-phases" },
     { name = "cryptography", specifier = ">=42" },
     { name = "dev-agent", editable = "packages/dev-agent" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.27" },

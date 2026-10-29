@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "The scheduler: spawns burst containers, owns all persistence (sessions, ledger) and telemetry."
 requires-python = ">=3.12"
 dependencies = [
+    "burst-phases",
     "dev-agent",
     "secret-refs",
     "session-volume",
@@ -25,6 +26,7 @@ dependencies = [
 control-plane = "control_plane.cli:main"
 
 [tool.uv.sources]
+burst-phases = { workspace = true }
 session-volume = { workspace = true }
 dev-agent = { workspace = true }
 secret-refs = { workspace = true }

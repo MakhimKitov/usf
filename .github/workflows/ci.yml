@@ -105,6 +105,18 @@ jobs:
         run: |
           docker run --rm usf/control-plane:latest --help >/dev/null
           docker run --rm --entrypoint sh usf/control-plane:latest -c "docker --version && git --version && kubectl version --client=true"
+      - name: the control-plane image imports every module it ships
+        # `--help` reaches the CLI and nothing it defers: a runner is imported
+        # when `run` picks one. The image installs control-plane's declared
+        # dependencies, not the workspace, so an undeclared import passes every
+        # test and fails here — burst-phases did, and only a replica with
+        # BURST_NAMESPACE set found out.
+        run: |
+          docker run --rm --entrypoint python usf/control-plane:latest -c "
+          import importlib, pkgutil, control_plane
+          for m in pkgutil.walk_packages(control_plane.__path__, 'control_plane.'):
+              importlib.import_module(m.name)
+          "
       - name: the reference k8s manifests are valid
         # kubeconform, pinned, from its image — no cluster, no kubectl; the
         # manifests are examples (TO-BE §5) and this is what keeps them from rotting.
