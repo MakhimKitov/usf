@@ -167,7 +167,7 @@ states: open · ready · assigned · in-progress · pr-open · needs-review ·
   SDK surfaces **rate-limit events/status** — the scheduler backs off spawning when
   the subscription window is near exhaustion instead of burning bursts into 429s.
 
-### Session continuity (confirmed, SDK v0.2.110)
+### Session continuity (confirmed, SDK v0.2.110; re-confirmed live on v0.2.175)
 
 The worker keeps its **full context across the whole task** — one persistent Claude
 session per task, not per burst. Mechanism, confirmed from the installed SDK:
