@@ -34,6 +34,9 @@ MAX_BUDGET_USD = "AGENT_MAX_BUDGET_USD"
 MAX_TURNS = "AGENT_MAX_TURNS"
 PERMISSION_MODE = "AGENT_PERMISSION_MODE"
 MODEL = "AGENT_MODEL"
+# How hard the model thinks (#119): the role row's `effort`, unset when the row
+# leaves it to the CLI's default for the model.
+EFFORT = "AGENT_EFFORT"
 GIT_USER_NAME = "AGENT_GIT_USER_NAME"
 GIT_USER_EMAIL = "AGENT_GIT_USER_EMAIL"
 
@@ -82,6 +85,10 @@ AGENT_SERVICE_NAME = "dev-agent"
 
 ROLES = ("dev", "reviewer", "tester")
 BURST_KINDS = ("work", "review", "assess", "test")
+# The SDK's `EffortLevel`, spelled here so the control plane can check a role
+# row against it without importing the SDK. `test_env_contract` holds the two
+# equal, so an SDK that adds a level fails the suite rather than a burst.
+EFFORT_LEVELS = ("low", "medium", "high", "xhigh", "max")
 
 # --- container filesystem contract (mount points, well-known files) ---
 CONTAINER_SESSION_DIR = "/session"  # control-plane-owned volume; CLAUDE_CONFIG_DIR
@@ -114,6 +121,7 @@ class BurstEnv:
     max_turns: int | None = None
     permission_mode: str = DEFAULT_PERMISSION_MODE
     model: str | None = None
+    effort: str | None = None
     github_token: str | None = None
     git_user_name: str | None = None
     git_user_email: str | None = None
@@ -158,6 +166,9 @@ class BurstEnv:
         kind = env.get(BURST_KIND, "work")
         if kind not in BURST_KINDS:
             raise EnvError(f"{BURST_KIND} must be one of {BURST_KINDS}, got {kind!r}")
+        effort = env.get(EFFORT) or None
+        if effort is not None and effort not in EFFORT_LEVELS:
+            raise EnvError(f"{EFFORT} must be one of {EFFORT_LEVELS}, got {effort!r}")
 
         def _float(name: str) -> float | None:
             raw = env.get(name)
@@ -187,6 +198,7 @@ class BurstEnv:
             max_turns=_int(MAX_TURNS),
             permission_mode=env.get(PERMISSION_MODE, DEFAULT_PERMISSION_MODE),
             model=env.get(MODEL) or None,
+            effort=effort,
             github_token=env.get(GITHUB_TOKEN) or None,
             git_user_name=env.get(GIT_USER_NAME) or None,
             git_user_email=env.get(GIT_USER_EMAIL) or None,

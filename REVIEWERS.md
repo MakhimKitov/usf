@@ -66,9 +66,9 @@ REVIEW_PROVIDERS=                # the selector — comma-list of claude,codex,c
                                  # must name at least one provider when REVIEW=on
 ```
 
-The reviewer's model, budget and turns are the `reviewer` role row's (D5):
-`control-plane role set reviewer --model … --budget … --turns …`, audited, governing
-the next burst. A different model than the dev's offsets same-family bias.
+The reviewer's model, effort, budget and turns are the `reviewer` role row's (D5):
+`control-plane role set reviewer --model … --effort … --budget … --turns …`, audited,
+governing the next burst. An unset effort is the CLI's default for the model. A different model than the dev's offsets same-family bias.
 
 - **The toggle owns *whether*, the selector owns *who*.** `REVIEW=off` ignores the
   selector entirely — a curated provider list survives being switched off.

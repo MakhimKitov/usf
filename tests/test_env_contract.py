@@ -1,8 +1,10 @@
 """The container env contract: parsing, defaults, validation."""
 
 from pathlib import Path
+from typing import get_args
 
 import pytest
+from claude_agent_sdk.types import EffortLevel
 from dev_agent import env as agentenv
 from dev_agent.env import BurstEnv, EnvError
 
@@ -20,6 +22,7 @@ def test_minimal_env_parses_with_defaults():
     assert env.permission_mode == agentenv.DEFAULT_PERMISSION_MODE
     assert env.resume_session_id is None
     assert env.fork_session is False
+    assert env.effort is None  # the CLI's default for the model
     assert env.result_path == Path(agentenv.CONTAINER_SESSION_DIR) / agentenv.BURST_RESULT_FILENAME
 
 
@@ -43,12 +46,14 @@ def test_full_env_parses():
             agentenv.MAX_BUDGET_USD: "2.5",
             agentenv.MAX_TURNS: "40",
             agentenv.MODEL: "claude-sonnet-5",
+            agentenv.EFFORT: "xhigh",
         }
     )
     assert env.role == "tester"
     assert env.burst_kind == "test"
     assert env.max_budget_usd == 2.5
     assert env.max_turns == 40
+    assert env.effort == "xhigh"
     assert env.session_dir == Path("/tmp/session")
     assert env.fork_session is False  # resuming is continuing, unless told to fork
     assert BurstEnv.from_environ(MINIMAL | {agentenv.FORK_SESSION: "1"}).fork_session is True
@@ -89,3 +94,12 @@ def test_bad_values_raise():
         BurstEnv.from_environ(MINIMAL | {agentenv.MAX_BUDGET_USD: "lots"})
     with pytest.raises(EnvError, match="AGENT_MAX_TURNS"):
         BurstEnv.from_environ(MINIMAL | {agentenv.MAX_TURNS: "3.5"})
+    with pytest.raises(EnvError, match="AGENT_EFFORT"):
+        BurstEnv.from_environ(MINIMAL | {agentenv.EFFORT: "ludicrous"})
+
+
+def test_the_effort_levels_are_the_sdks():
+    """The control plane checks a role row against `EFFORT_LEVELS` without
+    importing the SDK, so the spelling here has to be the SDK's own: a release
+    that adds or drops a level fails this, not a burst."""
+    assert agentenv.EFFORT_LEVELS == get_args(EffortLevel)

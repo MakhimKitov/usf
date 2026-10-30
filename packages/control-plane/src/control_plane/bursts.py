@@ -282,7 +282,7 @@ def execute_burst(
     """Run one burst container against the task and fold the results back in.
 
     The role's row (D5) is read here, at spawn, and is the source of the
-    burst's model, budget, turns, preamble and mount: ``model`` /
+    burst's model, effort, budget, turns, preamble and mount: ``model`` /
     ``max_budget_usd`` / ``max_turns`` given explicitly (the hand-run ``burst``
     verb) win for this one burst; None means the row. An edit to an open field
     therefore governs the *next* burst, with no restart.
@@ -330,12 +330,13 @@ def execute_burst(
             "container with custom-role execution (T4); no row that runs today may narrow"
         )
     model = model or profile.model
+    effort = profile.effort
     max_budget_usd = profile.max_budget_usd if max_budget_usd is None else max_budget_usd
     max_turns = profile.max_turns if max_turns is None else max_turns
     prompt = compose_prompt(profile, prompt)
     codex_auth = codex_auth_dir() if mount_codex else None
     if mode == "run":
-        log.info("burst starting", task=task.task_id, kind=kind, role=role, model=model)
+        log.info("burst starting", task=task.task_id, kind=kind, role=role, model=model, effort=effort)
 
     github_token = git_name = git_email = None
     if mode == "run" and with_github:
@@ -416,6 +417,7 @@ def execute_burst(
             max_budget_usd=max_budget_usd,
             max_turns=max_turns,
             model=model,
+            effort=effort,
             traceparent=traceparent,
             github_token=github_token,
             git_user_name=git_name,
