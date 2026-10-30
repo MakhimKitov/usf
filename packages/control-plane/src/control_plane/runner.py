@@ -118,6 +118,8 @@ class BurstSpec:
     max_budget_usd: float | None = None
     max_turns: int | None = None
     model: str | None = None
+    # the role row's `effort` (#119); None leaves it to the CLI's default for the model
+    effort: str | None = None
     traceparent: str | None = None
     github_token: str | None = None
     git_user_name: str | None = None
@@ -191,6 +193,8 @@ def burst_env(spec: BurstSpec) -> dict[str, str]:
         env[agentenv.MAX_TURNS] = str(spec.max_turns)
     if spec.model:
         env[agentenv.MODEL] = spec.model
+    if spec.effort:
+        env[agentenv.EFFORT] = spec.effort
     if spec.traceparent:
         env[agentenv.TRACEPARENT] = spec.traceparent
     if spec.github_token:

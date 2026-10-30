@@ -9,11 +9,12 @@ turned into what a burst actually gets:
   the image's own role preamble and `walls.py` deny floor run beneath whatever
   the row says; reviewer/tester/monitor mounts are read-only by code — a row
   can narrow the dev to read-only, it can never widen a reader to writable.
-- **Composition (data).** `prompt_preamble`, `model`, `max_budget_usd`,
-  `max_turns`, `mount_mode` are the operator's (`role set`, audited). The
-  wall-bearing fields — `role`, `kind`, `identity`, `sink`, `tools` — of a
-  pipeline row are frozen: refused here by name before any SQL, and by the
-  store's trigger beneath (Postgres `roles_pipeline_guard`, its SQLite twin).
+- **Composition (data).** `prompt_preamble`, `model`, `effort`,
+  `max_budget_usd`, `max_turns`, `mount_mode` are the operator's (`role set`,
+  audited). The wall-bearing fields — `role`, `kind`, `identity`, `sink`,
+  `tools` — of a pipeline row are frozen: refused here by name before any SQL,
+  and by the store's trigger beneath (Postgres `roles_pipeline_guard`, its
+  SQLite twin).
 
 Nothing here reads the environment. The model/budget/turn knobs the env used
 to carry (`DEV_AGENT_MODEL`, `REVIEWER_MODEL`, `TESTER_MODEL`,
@@ -24,6 +25,8 @@ source, the row, or "editing an open field changes the next burst" is false.
 from __future__ import annotations
 
 from collections.abc import Mapping
+
+from dev_agent.env import EFFORT_LEVELS
 
 from control_plane.models import RoleRecord
 
@@ -49,6 +52,7 @@ ALL_TOOLS = "*"
 ROLE_SET_COLUMNS: tuple[str, ...] = (
     "prompt_preamble",
     "model",
+    "effort",
     "max_budget_usd",
     "max_turns",
     "mount_mode",
@@ -98,6 +102,11 @@ def check_settable(changes: Mapping[str, object]) -> None:
         )
     if "model" in changes and not str(changes["model"]).strip():
         raise RoleError("model must name a model")
+    # None is a value here: it hands the choice back to the CLI's default for
+    # the model. Which levels a given model accepts is not the platform's table
+    # — a model that rejects one fails its burst like a wrong model name does.
+    if "effort" in changes and changes["effort"] is not None and changes["effort"] not in EFFORT_LEVELS:
+        raise RoleError(f"effort is one of {', '.join(EFFORT_LEVELS)}, or unset for the model's default")
     if "max_budget_usd" in changes and not float(changes["max_budget_usd"]) > 0:  # type: ignore[arg-type]
         raise RoleError("max_budget_usd must be positive — it is the SDK's hard stop")
     if "max_turns" in changes and not int(changes["max_turns"]) > 0:  # type: ignore[call-overload]
@@ -119,6 +128,8 @@ def validate(row: RoleRecord) -> RoleRecord:
             )
     if row.mount_mode not in MOUNT_MODES:
         raise RoleError(f"role {row.role!r} has mount_mode {row.mount_mode!r}, not one of {MOUNT_MODES}")
+    if row.effort is not None and row.effort not in EFFORT_LEVELS:
+        raise RoleError(f"role {row.role!r} has effort {row.effort!r}, not one of {EFFORT_LEVELS}")
     if not row.model.strip() or row.max_budget_usd <= 0 or row.max_turns <= 0:
         raise RoleError(f"role {row.role!r} has no model, budget or turns to run with")
     return row
