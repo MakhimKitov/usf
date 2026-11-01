@@ -8,6 +8,7 @@ the ledger names, or the control plane reading a result that was never written.
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -15,6 +16,7 @@ import subprocess
 import sys
 import tempfile
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -144,8 +146,13 @@ def initialize(environ: dict[str, str]) -> Path:
 def _clone(environ: dict[str, str], clone_url: str) -> None:
     """The product's clone, with a token that can only read one repository.
 
-    The token is written nowhere: it goes into the URL of a single `git clone`
-    invocation and dies with the process. `git` is told not to ask for anything
+    The token is written nowhere: it rides a single `git clone` invocation as
+    an HTTP header and dies with the process — never in the URL, which `git
+    clone` writes into the clone's `.git/config` as the origin. There it would
+    outlive init: every role's agent would hold it, and a dev's push would ride
+    it, read-only, past the credential helper (a 403 on the first JobsRunner
+    burst that tried). The control plane's own clone does the same
+    (`control_plane/clone.py`). `git` is told not to ask for anything
     interactively, so a token that does not work fails the phase instead of
     hanging a pod until its deadline.
     """
@@ -153,21 +160,26 @@ def _clone(environ: dict[str, str], clone_url: str) -> None:
     if not str(destination) or str(destination) == ".":
         raise PhaseError(f"{CLONE_URL} without {CLONE_DIR}: nowhere to put the clone")
     token = environ.get(CLONE_TOKEN, "").strip()
-    authenticated = clone_url
+    auth: list[str] = []
     if token and clone_url.startswith("https://"):
-        authenticated = clone_url.replace("https://", f"https://x-access-token:{token}@", 1)
+        host = urllib.parse.urlsplit(clone_url).netloc
+        auth = ["-c", f"http.https://{host}/.extraheader=Authorization: Basic {_basic(token)}"]
     ref = environ.get(CLONE_REF, "").strip()
     # The same two moves the control plane's own clone makes, in the same order:
     # clone, then detach onto a commit if that is what the ref is. Not shallow —
     # the tree a burst gets here has to be the tree it gets on the host path, and
     # a dev burst reads history and pushes a branch out of it. What that costs
     # per burst is the clone cache's problem (#105), not correctness's.
-    _run_git(["clone", authenticated, str(destination)], token, "the clone")
+    _run_git([*auth, "clone", clone_url, str(destination)], token, "the clone")
     if ref:
         if _IS_COMMIT.fullmatch(ref):
             _run_git(["-C", str(destination), "checkout", "--detach", ref], token, "the checkout")
         else:
             _run_git(["-C", str(destination), "checkout", "-B", ref, f"origin/{ref}"], token, "the checkout")
+
+
+def _basic(token: str) -> str:
+    return base64.b64encode(f"x-access-token:{token}".encode()).decode()
 
 
 def _run_git(args: list[str], token: str, what: str) -> None:
@@ -185,7 +197,9 @@ def _run_git(args: list[str], token: str, what: str) -> None:
     )
     if result.returncode != 0:
         # the token is in the command line, so the command is never echoed back
-        detail = (result.stderr or "").replace(token, "***") if token else (result.stderr or "")
+        detail = result.stderr or ""
+        if token:
+            detail = detail.replace(token, "***").replace(_basic(token), "***")
         last = detail.strip().splitlines()[-1:] or [""]
         raise PhaseError(f"{what} failed (exit {result.returncode}): {last[0]}"[:400])
 
