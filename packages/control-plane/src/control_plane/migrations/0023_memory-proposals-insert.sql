@@ -1,0 +1,21 @@
+-- 0023 — the runtime may propose what it learned (H4, #110).
+--
+-- H4 gave the control plane a write into memory_entries: a burst's proposals,
+-- folded from its harvest, and the branch summary of an attempt the scheduler
+-- abandons. 0002 left the table SELECT-only for platform_app, and no migration
+-- since granted the write, so on a ledger where replicas connect as
+-- platform_app every such INSERT was refused — and the refusal, a database
+-- error rather than a malformed proposal, took the replica down with the burst
+-- it was folding (first seen on the k3d node: nine restarts in two hours, each
+-- burst recorded `killed`, each PR it had opened retried as a duplicate).
+--
+-- INSERT only, deliberately:
+--   * no UPDATE — promotion from `proposed` to `active` is the gardener's, an
+--     operator act; `propose_memory` forces the status, and without UPDATE the
+--     runtime cannot promote what it proposed even by a statement that skips
+--     the store.
+--   * no DELETE — retention is platform_admin's, like everywhere else.
+-- The identity column needs no sequence grant: an identity's sequence is the
+-- column's own, and INSERT on the table is what generating its value takes.
+
+GRANT INSERT ON memory_entries TO platform_app;

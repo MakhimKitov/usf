@@ -681,6 +681,33 @@ def test_the_lease_statements_run_under_the_runtime_grants(db, walls_dsn):
         ledger.close()
 
 
+def test_the_memory_proposal_runs_under_the_runtime_grants(db, walls_dsn):
+    """The H4 write (0023), exercised by the real method as the real role: a
+    burst's proposal and an abandoned attempt's summary are both one INSERT
+    into memory_entries. 0002 left the table SELECT-only and H4 shipped the
+    write without the grant, so the method passed as platform_admin here and
+    was refused as platform_app on the node — where the refusal took the
+    replica down. And the wall beneath the grant: promotion is the
+    gardener's, so the runtime cannot UPDATE what it proposed."""
+    from control_plane.models import MemoryEntry
+    from control_plane.postgres import PostgresLedger
+
+    a_task(db)
+    a_running_burst(db, "b1")
+    ledger = PostgresLedger(walls_dsn)
+    try:
+        ledger._conn.execute("SET ROLE platform_app")  # for the rest of the session
+        stored = ledger.propose_memory(
+            MemoryEntry(scope="product", claim="c", evidence="e", repository=REPOSITORY, proposed_by_burst="b1")
+        )
+        assert stored.id is not None
+        assert [(e.proposed_by_burst, e.status) for e in ledger.memory_entries()] == [("b1", "proposed")]
+    finally:
+        ledger.close()
+    with pytest.raises(psycopg.errors.InsufficientPrivilege):
+        attempt(db, "UPDATE memory_entries SET status = 'active'", role="platform_app")
+
+
 def test_the_runtime_can_do_its_job(db):
     """The other direction, and the one a too-tight grant would break: everything
     the scheduler actually does, done as the role replicas connect as."""

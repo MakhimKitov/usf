@@ -130,6 +130,27 @@ def test_an_approach_failure_branches_and_an_environment_failure_retries(tmp_pat
     assert "error_max_budget_usd" in entry.evidence
 
 
+def test_a_refused_summary_is_a_log_line_and_the_scheduler_goes_on(tmp_path):
+    """The abandon is what the rail needs; the proposal is a by-product (H4).
+    A ledger that refuses the write — the node's, before 0023 granted
+    platform_app INSERT on memory_entries — must not take the replica down with
+    the burst it was judging: there, each crash left the task `working`, the
+    reconciler scored it "killed mid-burst", and a PR the burst had opened was
+    retried into a duplicate."""
+    scheduler, stores, runner = _rig(tmp_path, ["no-pr", "pr"])
+
+    def refuse(entry):
+        raise RuntimeError("permission denied for table memory_entries")
+
+    stores.ledger.propose_memory = refuse
+    _tick_until_spent(scheduler, runner)
+    first, second = runner.seen
+    assert "without opening a pull request" in stores.ledger.get_burst(first["burst"]).branch_summary
+    assert "ABANDONED ATTEMPTS" in second["prompt"]
+    assert stores.ledger.get_task(tid(1)).pr_number == 2
+    assert stores.ledger.memory_entries() == []
+
+
 def test_success_without_a_pr_is_an_approach_failure(tmp_path):
     scheduler, stores, runner = _rig(tmp_path, ["no-pr", "pr"])
     _tick_until_spent(scheduler, runner)
