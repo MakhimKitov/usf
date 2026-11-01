@@ -66,6 +66,30 @@ def test_a_burst_that_learned_nothing_proposes_nothing(stores, tmp_path):
     assert ledger.memory_entries() == []
 
 
+def test_a_ledger_that_refuses_a_proposal_does_not_fail_the_fold(stores, tmp_path):
+    """A proposal is a by-product of the work, so a store error on it — not
+    only a malformed proposal — is a log line (0023): the burst's own row and
+    its violations still land, and the control plane folding it lives on."""
+    archive, ledger = stores
+
+    def refuse(entry):
+        raise RuntimeError("permission denied for table memory_entries")
+
+    ledger.propose_memory = refuse
+    volume = materialize_volume(tmp_path / "volumes" / "b1", archive)
+    (volume / BURST_RESULT_FILENAME).write_text(
+        json.dumps({"session_id": "s1", "memories": [{"claim": "c", "evidence": "e"}]}), encoding="utf-8"
+    )
+    (volume / VIOLATIONS_FILENAME).write_text(
+        json.dumps({"tool": "Bash", "reason": "WALL", "input": "cat /etc/hostname"}) + "\n", encoding="utf-8"
+    )
+    burst = _burst("b1", task_id="owner/product#42")
+    harvest(volume, burst, archive, ledger)
+
+    assert burst.session_id == "s1"
+    assert [v.tool for v in ledger.violations("owner/product#42")] == ["Bash"]
+
+
 def harvest(volume, burst, archive, ledger, archive_session=True):
     """The two phases as `execute_burst` runs them: bytes out, then rows in."""
     artifacts = collect_volume(

@@ -34,7 +34,7 @@ from control_plane.prompts import abandoned_attempts
 from control_plane.roles import ALL_TOOLS, RoleError, compose_prompt, repo_read_only
 from control_plane.roles import validate as validate_role
 from control_plane.runner import DEFAULT_IMAGE, BurstSpec, Heartbeat, Runner, open_runner
-from control_plane.store import Ledger, MemoryError_, SessionArchive, open_archive, open_ledger, session_key
+from control_plane.store import Ledger, SessionArchive, open_archive, open_ledger, session_key
 from control_plane.subscriptions import (
     MACHINE_CREDENTIAL,
     Capacity,
@@ -183,7 +183,7 @@ def abandon_attempt(ledger: Ledger, task: TaskRecord, outcome: BurstOutcome, why
                 proposed_by_burst=burst.burst_id,
             )
         )
-    except MemoryError_ as exc:
+    except Exception as exc:  # noqa: BLE001 — a refused proposal is a log line, a store error too (0023)
         log.warning("the branch summary was not proposed", burst=burst.burst_id, reason=str(exc))
     return True
 

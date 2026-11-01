@@ -31,7 +31,7 @@ from dev_agent.env import BURST_RESULT_FILENAME, VIOLATIONS_FILENAME
 from control_plane.models import BurstRecord, BurstStatus, MemoryEntry, Violation
 import structlog
 
-from control_plane.store import ArchiveError, Ledger, MemoryError_, SessionArchive
+from control_plane.store import ArchiveError, Ledger, SessionArchive
 
 
 log = structlog.get_logger()
@@ -187,7 +187,7 @@ def fold_artifacts(
                 )
             )
             log.info("memory proposed", entry=stored.id, burst=burst.burst_id, scope=stored.scope)
-        except MemoryError_ as exc:
+        except Exception as exc:  # noqa: BLE001 — a by-product never fails the fold, a store error included (0023)
             log.warning("a memory proposal was refused", burst=burst.burst_id, reason=str(exc))
 
     for entry in artifacts.violations:
