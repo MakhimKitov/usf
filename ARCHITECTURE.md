@@ -294,9 +294,10 @@ the ephemeral container.
 > in data"). The four pipeline slots are seeded rows whose wall-bearing fields
 > (`role`, `kind`, `identity`, `sink`, `tools`) are frozen by the store — a
 > trigger on both backends, refused by name before it — and whose open fields
-> (`prompt_preamble`, `model`, `max_budget_usd`, `max_turns`, `mount_mode`) are
-> `role set`'s, audited. `execute_burst` reads the row at every spawn, so an
-> edit governs the next burst with no restart; the env knobs that used to carry
+> (`prompt_preamble`, `model`, `effort`, `max_budget_usd`, `max_turns`,
+> `mount_mode`) are `role set`'s, audited (`effort` since #119: NULL is the
+> CLI's default for the model). `execute_burst` reads the row at every spawn,
+> so an edit governs the next burst with no restart; the env knobs that used to carry
 > model/budget/turns are retired (startup refuses them). Ceilings stay code:
 > the tool allowlist, the image's role preamble, the deny floor, and read-only
 > mounts for every reader — a row narrows, never widens. Tool narrowing and

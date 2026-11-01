@@ -193,6 +193,7 @@ CREATE TABLE roles (
     prompt_preamble text NOT NULL,
     tools           jsonb NOT NULL,            -- must be ⊆ the code allowlist, checked at load
     model           text NOT NULL,
+    effort          text,                      -- NULL: the CLI's default for the model (#119)
     max_budget_usd  numeric NOT NULL,
     max_turns       integer NOT NULL,
     mount_mode      text NOT NULL,

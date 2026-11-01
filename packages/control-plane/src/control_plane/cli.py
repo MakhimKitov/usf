@@ -93,6 +93,7 @@ from control_plane.telemetry import init_telemetry
 from control_plane.volume import Snapshot
 from control_plane.testing import E2E_ENV, E2EPolicy, E2EPolicyError
 from control_plane.wake import attach_wakes
+from dev_agent.env import EFFORT_LEVELS
 from dev_agent.log import configure_logging
 
 log = structlog.get_logger()
@@ -371,6 +372,12 @@ def build_parser() -> argparse.ArgumentParser:
     role_set.add_argument("--preamble", default=None, help="prompt preamble, composed after the image's role preamble ('' clears)")
     role_set.add_argument("--preamble-file", type=Path, default=None, help="read the preamble from a file")
     role_set.add_argument("--model", default=None, help="the model this role's bursts run on")
+    role_set.add_argument(
+        "--effort",
+        choices=[*EFFORT_LEVELS, "default"],
+        default=None,
+        help="how hard the model thinks; 'default' leaves it to the CLI's default for the model",
+    )
     role_set.add_argument("--budget", type=float, default=None, help="max_budget_usd — the SDK's hard stop per burst")
     role_set.add_argument("--turns", type=int, default=None, help="max_turns per burst")
     role_set.add_argument("--mount", choices=["rw", "ro"], default=None, help="repo mount; readers stay ro whatever the row says")
@@ -802,7 +809,7 @@ def _print_role(row: RoleRecord) -> None:
     preamble = repr(row.prompt_preamble) if row.prompt_preamble else "—"
     print(f"  kind:      {row.kind}   identity: {row.identity}   sink: {row.sink}   (frozen)")
     print(f"  tools:     {tools}   (frozen)")
-    print(f"  model:     {row.model}")
+    print(f"  model:     {row.model}   effort: {row.effort or 'default'}")
     print(f"  budget:    ${row.max_budget_usd:.2f}   turns: {row.max_turns}   mount: {row.mount_mode}")
     print(f"  preamble:  {preamble}")
     print(f"  created:   {row.created_at}   updated: {row.updated_at}")
@@ -816,6 +823,8 @@ def _role_set(args: argparse.Namespace, ledger, actor: str) -> int:
         changes["prompt_preamble"] = args.preamble
     if args.preamble_file is not None:
         changes["prompt_preamble"] = args.preamble_file.read_text(encoding="utf-8")
+    if args.effort is not None:
+        changes["effort"] = None if args.effort == "default" else args.effort  # NULL: the CLI's default
     for column, value in (
         ("model", args.model),
         ("max_budget_usd", args.budget),
@@ -838,7 +847,8 @@ def _role(args: argparse.Namespace) -> int:
         if args.verb == "list":
             for row in ledger.list_roles():
                 print(
-                    f"{row.role}  {row.kind}  model={row.model}  budget=${row.max_budget_usd:.2f}  "
+                    f"{row.role}  {row.kind}  model={row.model}  effort={row.effort or 'default'}  "
+                    f"budget=${row.max_budget_usd:.2f}  "
                     f"turns={row.max_turns}  mount={row.mount_mode}  "
                     f"preamble={'yes' if row.prompt_preamble.strip() else 'no'}"
                 )

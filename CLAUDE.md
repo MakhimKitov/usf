@@ -258,13 +258,19 @@ ref named, never a crash. `grep -ri vault packages/` stays empty by design.
 
 **Roles as rows (D5)**: the four pipeline roles are rows in `roles` (seeded by
 0002 on Postgres, by `_SCHEMA` on SQLite — the same values), and `execute_burst`
-reads the role's row at *every* spawn: `model`, `max_budget_usd`, `max_turns`,
-`prompt_preamble` (composed ahead of the task prompt, *after* the image's own
-role preamble — the ceiling text stays code) and `mount_mode` come from it, so
-`control-plane role set dev --model … --budget … --turns … --preamble …` governs
-the next burst with no restart, audited (`role.set` + a `role_updated` event, one
-write). `role list` / `role show` read. Ceilings are code (`roles.py`): a row's
-`tools` must be `["*"]` or ⊆ `TOOL_ALLOWLIST` (checked at load; a narrowed row
+reads the role's row at *every* spawn: `model`, `effort`, `max_budget_usd`,
+`max_turns`, `prompt_preamble` (composed ahead of the task prompt, *after* the
+image's own role preamble — the ceiling text stays code) and `mount_mode` come
+from it, so `control-plane role set dev --model … --effort … --budget … --turns …
+--preamble …` governs the next burst with no restart, audited (`role.set` + a
+`role_updated` event, one write). `role list` / `role show` read. `effort` (#119,
+0022) is the SDK's level — `low|medium|high|xhigh|max`, checked in code at `role
+set` and at load, no CHECK in the schema — and NULL, the seed, leaves it to the
+CLI's default for the model (`--effort default` sets it back); it reaches the box
+as `AGENT_EFFORT` and the engine as `ClaudeAgentOptions.effort`, and which levels
+a model accepts is not the platform's table — a refusal fails the burst like a
+wrong model name. Ceilings are code (`roles.py`): a row's `tools` must be
+`["*"]` or ⊆ `TOOL_ALLOWLIST` (checked at load; a narrowed row
 refuses to spawn until custom-role execution lands at T4 — running it wide would
 be a silent widening); reviewer/tester/monitor mounts are read-only whatever the
 row says (a row narrows the dev to `ro`, never widens a reader). The wall-bearing

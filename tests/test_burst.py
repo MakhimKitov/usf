@@ -96,6 +96,14 @@ def test_a_fork_reaches_the_engine_as_the_sdks_own_flag():
     assert burst._to_options(BurstEnv(**base)).fork_session is False
 
 
+def test_effort_reaches_the_engine_only_when_the_row_set_one():
+    """Unset is the CLI's own default for the model (#119): the options carry
+    no effort, so the SDK passes no `--effort` — what every burst ran at before."""
+    base = dict(task_id="42", burst_id="b1")
+    assert burst._to_options(BurstEnv(**base, effort="xhigh")).effort == "xhigh"
+    assert burst._to_options(BurstEnv(**base)).effort is None
+
+
 def test_final_text_is_the_last_assistant_message(tmp_path, monkeypatch):
     """Structured reviewer output rides the final message alone — earlier
     narration must not contaminate it."""

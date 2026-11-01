@@ -78,6 +78,25 @@ def test_a_column_added_after_the_file_was_made_gets_added_to_it(tmp_path):
     assert ledger.latest_archived_burst("owner/product#7") is None
 
 
+def test_a_roles_table_from_before_effort_opens_and_takes_one(tmp_path):
+    """0022 (#119): a file made while the row had no `effort` gains the column on
+    open. Every seeded row reads back unset — the CLI's default, which is what
+    those bursts ran at — and an operator's earlier edit survives the repair."""
+    db = tmp_path / "ledger.sqlite3"
+    SqliteLedger(db).close()
+    conn = sqlite3.connect(db)
+    conn.execute("UPDATE roles SET model = 'claude-opus-5' WHERE role = 'dev'")
+    conn.execute("ALTER TABLE roles DROP COLUMN effort")  # back to the shape 0014 knew
+    conn.commit()
+    conn.close()
+
+    ledger = SqliteLedger(db)
+    assert {row.effort for row in ledger.list_roles()} == {None}
+    assert ledger.get_role("dev").model == "claude-opus-5"
+    ledger.update_role("dev", {"effort": "high"}, "op")
+    assert ledger.get_role("dev").effort == "high"
+
+
 def test_a_pre_a6_ledger_refuses_to_open_and_says_what_to_run(tmp_path):
     """A6 retires this ledger as an origin (STORES.md). Its rows are keyed by a
     bare issue number, which no longer identifies a task, and no `ALTER TABLE` can

@@ -546,6 +546,7 @@ CREATE TABLE IF NOT EXISTS roles (
     prompt_preamble TEXT NOT NULL,
     tools TEXT NOT NULL,
     model TEXT NOT NULL,
+    effort TEXT,
     max_budget_usd REAL NOT NULL,
     max_turns INTEGER NOT NULL,
     mount_mode TEXT NOT NULL,
@@ -720,6 +721,9 @@ _ADDITIVE_COLUMNS = (
     ("bursts", "subscription_id", "TEXT"),
     # 0021, H5 (#107) — NULL: a live node, which every burst in a file this old is
     ("bursts", "branch_summary", "TEXT CHECK (branch_summary <> '')"),
+    # 0022 (#119) — NULL: the CLI's default for the model, which every burst in a
+    # file this old ran at
+    ("roles", "effort", "TEXT"),
 )
 
 

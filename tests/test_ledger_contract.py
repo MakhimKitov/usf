@@ -1429,6 +1429,7 @@ def test_the_pipeline_roles_are_seeded_identically(ledger):
     assert rows["dev"].mount_mode == "rw" and rows["reviewer"].mount_mode == "ro"
     assert rows["monitor"].sink == "event" and rows["dev"].sink == "issue_comment"
     assert (rows["dev"].model, rows["dev"].max_budget_usd, rows["dev"].max_turns) == ("claude-sonnet-5", 2.0, 100)
+    assert {row.effort for row in rows.values()} == {None}  # the CLI's default for the model
     assert isinstance(rows["dev"].max_budget_usd, float)  # numeric → float at the edge
     assert rows["dev"].trigger is None
     assert ledger.get_role("ghost") is None
@@ -1439,6 +1440,7 @@ def test_role_set_changes_the_open_fields_and_leaves_a_trail(ledger):
     changes = {
         "prompt_preamble": "Be terse.",
         "model": "claude-opus-5",
+        "effort": "low",
         "max_budget_usd": 0.5,
         "max_turns": 30,
         "mount_mode": "rw",
@@ -1463,6 +1465,15 @@ def test_role_set_changes_the_open_fields_and_leaves_a_trail(ledger):
     }
 
 
+def test_role_set_can_hand_effort_back_to_the_model(ledger):
+    # NULL is a value `role set` writes, not only the seed's
+    ledger.update_role("dev", {"effort": "max"}, "op")
+    assert ledger.get_role("dev").effort == "max"
+    ledger.update_role("dev", {"effort": None}, "op")
+    assert ledger.get_role("dev").effort is None
+    assert [e.payload["changed"] for e in ledger.events() if e.kind == "role_updated"] == [["effort"], ["effort"]]
+
+
 def test_role_set_refuses_walls_unknowns_and_ghosts(ledger):
     from control_plane.roles import RoleError
 
@@ -1472,6 +1483,8 @@ def test_role_set_refuses_walls_unknowns_and_ghosts(ledger):
         ledger.update_role("dev", {"trigger": {"schedule": "daily"}}, "op")
     with pytest.raises(RoleError, match="no role named 'ghost'"):
         ledger.update_role("ghost", {"model": "x"}, "op")
+    with pytest.raises(RoleError, match="effort is one of"):
+        ledger.update_role("dev", {"effort": "ludicrous"}, "op")
     # nothing was written on any refusal — no row change, no trail
     assert ledger.get_role("dev").model == "claude-sonnet-5"
     assert ledger.audit_trail("dev") == [] and ledger.audit_trail("ghost") == []

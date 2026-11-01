@@ -90,6 +90,10 @@ def _to_options(env: BurstEnv) -> ClaudeAgentOptions:
         max_budget_usd=env.max_budget_usd,
         permission_mode=env.permission_mode,  # type: ignore[arg-type]
         model=env.model,
+        # None is the CLI's own default for the model: the SDK passes no
+        # `--effort` at all, which is what every burst ran at before the row
+        # carried it (#119)
+        effort=env.effort,  # type: ignore[arg-type]
         plugins=plugins,  # type: ignore[arg-type]
         hooks={
             "PreToolUse": [

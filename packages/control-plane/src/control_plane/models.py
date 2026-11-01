@@ -125,9 +125,10 @@ class RoleRecord:
 
     Ceilings in code, composition in data: the wall-bearing fields (`role`,
     `kind`, `identity`, `sink`, `tools`) of a pipeline row are frozen by the
-    store; the open ones (`prompt_preamble`, `model`, `max_budget_usd`,
-    `max_turns`, `mount_mode`) are `role set`'s, audited. `execute_burst`
-    reads the row at every spawn, so an edit governs the next burst.
+    store; the open ones (`prompt_preamble`, `model`, `effort`,
+    `max_budget_usd`, `max_turns`, `mount_mode`) are `role set`'s, audited.
+    `execute_burst` reads the row at every spawn, so an edit governs the next
+    burst.
     """
 
     role: str  # the primary key; pipeline identity is code keyed on this name
@@ -135,6 +136,7 @@ class RoleRecord:
     prompt_preamble: str = ""  # composed *after* the image's role preamble, never instead
     tools: list = field(default_factory=lambda: ["*"])  # ['*'] or ⊆ roles.TOOL_ALLOWLIST
     model: str = "claude-sonnet-5"
+    effort: str | None = None  # dev_agent.env.EFFORT_LEVELS; None is the CLI's default for the model
     max_budget_usd: float = 2.0
     max_turns: int = 100
     mount_mode: str = "rw"  # 'rw' | 'ro' — a row can narrow the mount, never widen it

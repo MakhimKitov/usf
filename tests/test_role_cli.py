@@ -28,7 +28,9 @@ def test_list_names_the_four_slots_with_their_open_fields(tmp_path, capsys):
     assert run(tmp_path, "list") == 0
     out = capsys.readouterr().out.splitlines()
     assert [line.split()[0] for line in out] == ["dev", "monitor", "reviewer", "tester"]
-    assert "dev  pipeline  model=claude-sonnet-5  budget=$2.00  turns=100  mount=rw  preamble=no" in out
+    assert (
+        "dev  pipeline  model=claude-sonnet-5  effort=default  budget=$2.00  turns=100  mount=rw  preamble=no"
+    ) in out
 
 
 def test_set_changes_the_open_fields_and_says_so(tmp_path, capsys):
@@ -57,6 +59,28 @@ def test_set_clears_a_preamble_with_an_empty_string(tmp_path):
     assert stored(tmp_path, "dev").prompt_preamble == "Be terse."
     assert run(tmp_path, "set", "dev", "--preamble", "") == 0
     assert stored(tmp_path, "dev").prompt_preamble == ""
+
+
+def test_set_effort_and_back_to_the_models_default(tmp_path, capsys):
+    assert run(tmp_path, "set", "dev", "--effort", "xhigh", "--reason", "think harder") == 0
+    out = capsys.readouterr().out
+    assert "dev set: effort — governs the next burst" in out
+    assert "model:     claude-sonnet-5   effort: xhigh" in out
+    assert stored(tmp_path, "dev").effort == "xhigh"
+    assert stored(tmp_path, "reviewer").effort is None
+
+    assert run(tmp_path, "set", "dev", "--effort", "default") == 0
+    assert "effort: default" in capsys.readouterr().out
+    assert stored(tmp_path, "dev").effort is None
+
+
+def test_an_unknown_effort_refuses_at_the_flag(tmp_path, capsys):
+    import pytest
+
+    with pytest.raises(SystemExit):
+        run(tmp_path, "set", "dev", "--effort", "ludicrous")
+    assert "invalid choice: 'ludicrous'" in capsys.readouterr().err
+    assert stored(tmp_path, "dev").effort is None
 
 
 def test_set_refuses_what_it_must(tmp_path, capsys):

@@ -12,8 +12,11 @@ from control_plane import roles
 from control_plane.bursts import PlatformStores, execute_burst
 from control_plane.models import RoleRecord, TaskRecord
 from control_plane.roles import RoleError
-from control_plane.runner import HostPhases
+from control_plane.runner import HostPhases, burst_env
 from control_plane.store import SqliteLedger
+from dev_agent import burst
+from dev_agent import env as agentenv
+from dev_agent.env import BurstEnv
 
 
 class RecordingRunner(HostPhases):
@@ -50,7 +53,9 @@ def engine(tmp_path):
 def test_the_field_split_is_the_contract():
     # what `role set` may touch vs. what is frozen — disjoint, and together the
     # whole row minus key-adjacent bookkeeping (trigger is T4's)
-    assert set(roles.ROLE_SET_COLUMNS) == {"prompt_preamble", "model", "max_budget_usd", "max_turns", "mount_mode"}
+    assert set(roles.ROLE_SET_COLUMNS) == {
+        "prompt_preamble", "model", "effort", "max_budget_usd", "max_turns", "mount_mode"
+    }
     assert set(roles.ROLE_WALL_COLUMNS) == {"role", "kind", "identity", "sink", "tools"}
     assert not set(roles.ROLE_SET_COLUMNS) & set(roles.ROLE_WALL_COLUMNS)
     assert roles.PIPELINE_ROLES == ("dev", "reviewer", "tester", "monitor")
@@ -73,11 +78,28 @@ def test_check_settable_refuses_walls_by_name():
         ({"max_budget_usd": 0}, "must be positive"),
         ({"max_turns": -1}, "must be positive"),
         ({"mount_mode": "rwx"}, "one of rw, ro"),
+        ({"effort": "ludicrous"}, "effort is one of low, medium, high, xhigh, max"),
     ],
 )
 def test_check_settable_shapes_each_value(changes, why):
     with pytest.raises(RoleError, match=why):
         roles.check_settable(changes)
+
+
+def test_unset_is_an_effort_value():
+    # None hands the choice back to the CLI's default for the model — `role set
+    # --effort default` — so it passes the gate the levels pass
+    roles.check_settable({"effort": None})
+    for level in agentenv.EFFORT_LEVELS:
+        roles.check_settable({"effort": level})
+
+
+def test_a_row_with_an_unknown_effort_refuses_to_shape_a_burst():
+    # what stands behind a row edited past the verb: the levels have no CHECK
+    # in the schema (an open field), so the load is where they are held
+    with pytest.raises(RoleError, match="effort 'turbo'"):
+        roles.validate(RoleRecord(role="dev", kind="pipeline", effort="turbo"))
+    assert roles.validate(RoleRecord(role="dev", kind="pipeline", effort="max")).effort == "max"
 
 
 def test_tools_must_stay_inside_the_code_allowlist():
@@ -119,6 +141,7 @@ def test_the_seeded_row_is_what_a_burst_gets(engine):
     stores, spawn = engine
     spec = spawn()
     assert (spec.model, spec.max_budget_usd, spec.max_turns) == ("claude-sonnet-5", 2.0, 100)
+    assert spec.effort is None  # seeded unset: the CLI's default, as before the column
     assert spec.prompt == "fix the bug" and spec.repo_read_only is False
     reviewer = spawn(role="reviewer")
     assert reviewer.repo_read_only is True
@@ -142,6 +165,30 @@ def test_editing_an_open_field_changes_the_next_burst(engine):
     # every edit left its trail
     assert [a.action for a in stores.ledger.audit_trail("dev")] == ["role.set", "role.set"]
     assert stores.ledger.audit_trail("dev")[0].reason == "cheaper dev rounds"
+
+
+def options_for(spec):
+    """The SDK options the box would build from what `burst_env` hands it —
+    the whole path an effort takes from the row to the engine."""
+    return burst._to_options(BurstEnv.from_environ(burst_env(spec)))
+
+
+def test_role_set_effort_reaches_the_next_bursts_options(engine):
+    """#119's done-when: `role set dev --effort xhigh` makes the next dev burst's
+    options carry it; `--effort default` (NULL) takes it out again."""
+    stores, spawn = engine
+    assert options_for(spawn()).effort is None
+    assert agentenv.EFFORT not in burst_env(spawn())
+
+    stores.ledger.update_role("dev", {"effort": "xhigh"}, actor="op", reason="think harder")
+    spec = spawn()
+    assert burst_env(spec)[agentenv.EFFORT] == "xhigh"
+    assert options_for(spec).effort == "xhigh"
+    assert options_for(spawn(role="reviewer")).effort is None  # the dev's row, not every row's
+
+    stores.ledger.update_role("dev", {"effort": None}, actor="op")
+    assert options_for(spawn()).effort is None
+    assert [a.action for a in stores.ledger.audit_trail("dev")] == ["role.set", "role.set"]
 
 
 def test_explicit_burst_arguments_win_for_that_burst_only(engine):
