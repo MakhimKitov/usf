@@ -1,5 +1,6 @@
-# Dev-agent warm base image (ARCHITECTURE.md §6): toolchain + claude CLI +
-# the burst worker. A burst is then just clone/checkout + agent boot.
+# Dev-agent warm base image (ARCHITECTURE.md §6): toolchain + the burst worker
+# + the Claude Code CLI its SDK bundles. A burst is then just clone/checkout +
+# agent boot.
 #
 # Walls baked into the image (§8):
 #   - only the dev-agent package is installed — no control-plane code in the box
@@ -22,6 +23,18 @@ COPY packages/dev-agent /src/dev-agent
 COPY packages/session-volume /src/session-volume
 RUN uv build --wheel /src/session-volume --out-dir /wheels \
     && uv build --wheel /src/dev-agent --out-dir /wheels
+
+# Everything the two wheels depend on, at the versions uv.lock names, with their
+# hashes (#120). Without this, `pip install` of the wheels resolves
+# `claude-agent-sdk>=…` against PyPI on the day of the build: two images built a
+# week apart would be two engines, and neither the one CI tested. `--frozen`
+# reads the lock as it stands; what it needs besides is the workspace's shape —
+# the root manifest and the manifests of the two members it exports, no source.
+COPY pyproject.toml uv.lock /lock/
+COPY packages/dev-agent/pyproject.toml /lock/packages/dev-agent/
+COPY packages/session-volume/pyproject.toml /lock/packages/session-volume/
+RUN cd /lock && uv export --frozen --package dev-agent --no-dev --no-emit-workspace \
+        --output-file /wheels/requirements.txt
 
 
 FROM python:3.12-slim
@@ -67,8 +80,21 @@ RUN useradd --create-home --uid 1000 agent \
     && mkdir -p /session /workspace/repo \
     && chown -R agent:agent /session /workspace
 
+# The lock first, every artifact hash-checked; then the two workspace wheels on
+# top with no resolution of their own. Every version in the box is uv.lock's.
 COPY --from=build /wheels /wheels
-RUN pip install --no-cache-dir /wheels/*.whl && rm -rf /wheels
+RUN pip install --no-cache-dir --require-hashes -r /wheels/requirements.txt \
+    && pip install --no-cache-dir --no-deps /wheels/*.whl \
+    && rm -rf /wheels
+
+# Claude Code CLI — the engine the SDK drives is the one its wheel bundles: the
+# SDK's transport prefers `_bundled/claude` over anything on PATH, so a second,
+# standalone install only ever answered `claude --version` (#120). Nothing in the
+# box calls `claude` by name, so nothing is linked onto PATH. Reported here, and
+# run rather than read, so a wheel for the wrong platform fails the build. It is
+# root-owned, like the rest of site-packages: the agent cannot swap its own engine.
+RUN python -c "import claude_agent_sdk; print('claude-agent-sdk', claude_agent_sdk.__version__)" \
+    && "$(python -c 'from dev_agent.cli import BUNDLED_CLI; print(BUNDLED_CLI)')" --version
 
 # The toolkit plugin: image-baked procedures (e.g. the codex-review skill).
 # Root-owned on purpose — the agent can use these, never edit them.
@@ -78,10 +104,6 @@ USER agent
 ENV HOME=/home/agent \
     PATH="/home/agent/.local/bin:${PATH}" \
     CLAUDE_CONFIG_DIR=/session
-
-# Claude Code CLI — the engine the SDK drives. Native standalone install.
-RUN curl -fsSL https://claude.ai/install.sh | bash \
-    && claude --version
 
 WORKDIR /workspace/repo
 # No `VOLUME` here, deliberately. Both paths are always mounted by whatever runs

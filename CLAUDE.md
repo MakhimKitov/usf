@@ -11,7 +11,14 @@ a PR — through GitHub.
 [`claude-agent-sdk`](https://github.com/anthropics/claude-agent-sdk-python) — Claude
 Code as an embeddable Python library (agent loop, tool suite, layered permission model,
 sandbox mode, sessions/resume, `max_budget_usd`). We build on these primitives rather
-than reinvent them. Requires the `claude` CLI on PATH.
+than reinvent them. The SDK's platform wheel bundles the `claude` CLI it drives
+(`claude_agent_sdk/_bundled/claude`, preferred over anything on PATH), so the SDK
+version in `uv.lock` *is* the engine version. The dev-agent image installs the lock's
+versions, hash-checked (`uv export --frozen` → `pip install --require-hashes`), carries
+no second CLI, and CI fails the image if its SDK is not the lock's (#120);
+`dev-agent check` reports `sdk_version` / `cli_version`. Bumping the engine is a lock
+change: read the SDK's changelog for what a burst relies on (the options it builds, the
+message types it reads, `max_budget_usd`, the PreToolUse hook).
 
 ## Setup
 

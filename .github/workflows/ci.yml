@@ -78,6 +78,27 @@ jobs:
           done
           docker run --rm --entrypoint python "$img" -c "import dev_agent.cli, session_volume"
           test "$(docker run --rm --entrypoint id "$img" -u)" = "1000"
+      - name: the burst image runs the SDK the lock names
+        # #120: the image installs uv.lock's versions, hash-checked, and drives
+        # the CLI that SDK bundles — so the engine is a fact about the lock, not
+        # about the day the image was built. The bundled CLI's own --version has
+        # to agree with the version its SDK declares.
+        run: |
+          set -e
+          img=usf/dev-agent:latest
+          locked=$(python3 -c "import tomllib; print(next(p['version'] for p in tomllib.load(open('uv.lock', 'rb'))['package'] if p['name'] == 'claude-agent-sdk'))")
+          read -r shipped declared <<< "$(docker run --rm --entrypoint python "$img" -c \
+            "import claude_agent_sdk; from claude_agent_sdk._cli_version import __cli_version__; print(claude_agent_sdk.__version__, __cli_version__)")"
+          if [ "$shipped" != "$locked" ]; then
+            echo "::error::the dev-agent image carries claude-agent-sdk $shipped, uv.lock names $locked"; exit 1
+          fi
+          ran=$(docker run --rm --entrypoint sh "$img" -c \
+            '"$(python -c "from dev_agent.cli import BUNDLED_CLI; print(BUNDLED_CLI)")" --version')
+          case "$ran" in
+            "$declared"*) ;;
+            *) echo "::error::the bundled CLI says '$ran', its SDK declares $declared"; exit 1 ;;
+          esac
+          echo "claude-agent-sdk $shipped (lock: $locked), bundled CLI $declared" >> "$GITHUB_STEP_SUMMARY"
       - name: the burst-phases image
         run: docker build -f docker/burst-phases/Dockerfile -t usf/burst-phases:latest .
       - name: the phases image holds capabilities, never credentials

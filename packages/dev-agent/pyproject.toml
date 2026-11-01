@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "The burst worker: runs one work burst inside the dev container. Standalone — must never depend on control-plane (the image cannot contain platform code)."
 requires-python = ">=3.12"
 dependencies = [
-    "claude-agent-sdk>=0.2.110",
+    "claude-agent-sdk>=0.2.175",
     "session-volume",
     "structlog>=26.1.0",
 ]
