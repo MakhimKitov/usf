@@ -172,10 +172,7 @@ def test_init_says_so_when_the_object_is_gone(tmp_path, served):
         })
 
 
-def test_init_clones_the_product_with_the_token_it_alone_holds(tmp_path):
-    """A local repository stands in for GitHub: what is tested is that init
-    produces a working tree at the ref it was given, and that a failure names
-    the failure without echoing the token."""
+def _origin(tmp_path):
     origin = tmp_path / "origin"
     origin.mkdir()
     run = lambda *args: subprocess.run(args, cwd=origin, capture_output=True, check=True)  # noqa: E731
@@ -185,6 +182,14 @@ def test_init_clones_the_product_with_the_token_it_alone_holds(tmp_path):
     (origin / "README.md").write_text("product\n", encoding="utf-8")
     run("git", "add", "README.md")
     run("git", "commit", "-m", "first")
+    return origin
+
+
+def test_init_clones_the_product_with_the_token_it_alone_holds(tmp_path):
+    """A local repository stands in for GitHub: what is tested is that init
+    produces a working tree at the ref it was given, and that a failure names
+    the failure without echoing the token."""
+    origin = _origin(tmp_path)
 
     clone = tmp_path / "clone"
     initialize({
@@ -194,6 +199,41 @@ def test_init_clones_the_product_with_the_token_it_alone_holds(tmp_path):
         CLONE_DIR: str(clone),
     })
     assert (clone / "README.md").read_text(encoding="utf-8") == "product\n"
+
+
+def test_the_clone_keeps_no_token_in_its_config(tmp_path, monkeypatch):
+    """`git clone` writes the URL it was given into `.git/config` as the origin.
+    A token in that URL outlives init: every role's agent holds it, and a dev's
+    `git push` rides it — read-only — past the credential helper, so the first
+    JobsRunner burst that pushed got a 403. A local repository stands in for
+    GitHub through `insteadOf`, which rewrites the plain URL alone: a URL with
+    the token in it does not match, and the clone fails."""
+    origin = _origin(tmp_path)
+    url = "https://github.com/owner/product.git"
+    gitconfig = tmp_path / "gitconfig"
+    gitconfig.write_text(f'[url "{origin.as_uri()}"]\n\tinsteadOf = {url}\n', encoding="utf-8")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(gitconfig))
+    monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    token = "ghs-a-real-looking-token"
+
+    clone = tmp_path / "clone"
+    initialize({
+        VOLUME_DIR: str(tmp_path / "volume"),
+        CLONE_URL: url,
+        CLONE_REF: "main",
+        CLONE_DIR: str(clone),
+        CLONE_TOKEN: token,
+    })
+
+    assert (clone / "README.md").read_text(encoding="utf-8") == "product\n"
+    config = (clone / ".git" / "config").read_text(encoding="utf-8")
+    assert token not in config
+    assert "extraheader" not in config
+    origin_url = subprocess.run(
+        ["git", "-C", str(clone), "config", "--get", "remote.origin.url"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    assert origin_url == url
 
 
 def test_a_clone_that_fails_never_echoes_the_token(tmp_path):
