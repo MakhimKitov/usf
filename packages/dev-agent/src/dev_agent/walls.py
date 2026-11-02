@@ -19,6 +19,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from opentelemetry import trace
+
 FILE_TOOLS = {"Read", "Write", "Edit", "Glob", "Grep", "NotebookEdit"}
 PATH_KEYS = ("file_path", "path", "notebook_path")
 
@@ -97,6 +99,13 @@ def make_pre_tool_use_hook(repo_dir: Path, violations_path: Path):
         if reason is None:
             return {}
         record_violation(violations_path, tool_name, reason, tool_input)
+        # on the worker's span, when the burst is traced: the hook runs in the
+        # span's context (`run_burst_sync`), and `tool.use_id` is the join to
+        # the CLI's own span for the same call. A no-op when nothing is traced.
+        trace.get_current_span().add_event(
+            "wall.denied",
+            {"tool.name": tool_name, "tool.use_id": tool_use_id or "", "wall.reason": reason},
+        )
         return {
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",

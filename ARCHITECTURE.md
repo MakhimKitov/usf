@@ -569,22 +569,31 @@ later; retrofitting correlation can't). Span naming follows the OTel **GenAI sem
 conventions** where applicable (still experimental) and Claude Code's built-in
 `claude_code.*` spans as-is.
 
-- **Trace = one burst; the task is a correlation attribute.** A task can span days,
-  and multi-day open traces break tooling — so each burst is its own trace. Every
-  span/event carries `task.id` (= issue), `burst.id`, `role` (dev|tester), and each
-  burst links to its predecessor via span links. The burst ledger (Control DB) stores
+- **Trace = one turn; the task is a correlation attribute.** A task can span days,
+  and multi-day open traces break tooling — so each *turn* is its own trace: what
+  the platform does for one task in one go — sync the clone, read GitHub, run at
+  most one burst, act on what it left (`turn` → `clone.sync`, `github.request`,
+  `burst` → `burst.materialize` / `burst.run` / `burst.collect` / `burst.fold`).
+  A turn holds at most one burst, so "one burst per trace" still holds; what the
+  turn adds is the platform's own work around it. A tick that only polls is not
+  traced — a trace a minute of nothing — and a GitHub call is a span only inside
+  a turn. Every span/event carries `task.id` (= issue), `burst.id`, `role`
+  (dev|tester), and each burst links to its predecessor via span links. The burst ledger (Control DB) stores
   each burst's `trace_id` **and the id of the burst span in it** — a link names a
   span, not a trace, so one half of the pair would only buy a link that resolves to
   nothing. Task-level assembly is a query.
-- **Context propagation is built in:** the control plane opens the burst span and
-  injects `TRACEPARENT` into the container env; Claude Code in SDK/non-interactive
-  mode adopts it, nesting its span tree (`claude_code.interaction` →
-  `llm_request` / `tool` / `hook`, subagents, even Bash subprocesses) under our burst
-  span. No custom instrumentation inside the box.
+- **Context propagation is built in:** the control plane injects its `burst.run`
+  step's `TRACEPARENT` into the container env; the worker opens one span under it,
+  `agent.burst` (`dev_agent.tracing` — how the run ended, and a `wall.denied` event
+  per denial, joined to the CLI's tool span by `tool.use_id`), and keeps it current
+  while the SDK runs; the SDK hands the CLI the current context, and Claude Code in
+  SDK/non-interactive mode nests its span tree (`claude_code.interaction` →
+  `llm_request` / `tool` / `hook`, subagents, even Bash subprocesses) under the
+  worker's span. One span is the box's own; everything below it is the CLI's.
 - **Agent-side telemetry is Claude Code's own OTel** (B2): traces (beta, two
   switches) and structured events (`tool_result`, `tool_decision`, `api_request`,
-  `user_prompt`), configured entirely by env the runner injects — no custom
-  instrumentation inside the box. `OTEL_RESOURCE_ATTRIBUTES` stamps every signal with
+  `user_prompt`), configured entirely by env the runner injects — the worker's one
+  span reads the same switches, so nothing else configures the box. `OTEL_RESOURCE_ATTRIBUTES` stamps every signal with
   `task.id` / `burst.id` / `burst.role` / `burst.kind`, so a query written against one
   signal works on the other. Content flags: tool **arguments** on
   (`OTEL_LOG_TOOL_DETAILS`, prompts) — tool visibility *is* the experiment's dataset —

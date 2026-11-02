@@ -89,7 +89,7 @@ from control_plane.store import (
     open_archive,
     open_ledger,
 )
-from control_plane.telemetry import init_telemetry
+from control_plane.telemetry import init_telemetry, turn_span
 from control_plane.volume import Snapshot
 from control_plane.testing import E2E_ENV, E2EPolicy, E2EPolicyError
 from control_plane.wake import attach_wakes
@@ -967,19 +967,21 @@ def _run_burst(args: argparse.Namespace) -> int:
         task_id=task_id, repository=slug, issue_number=args.issue
     )
     try:
-        outcome = execute_burst(
-            stores,
-            task,
-            repo,
-            prompt,
-            mode=args.mode,
-            image=args.image,
-            model=args.model,  # each None → the dev role row (D5)
-            max_budget_usd=args.budget,
-            max_turns=args.max_turns,
-            fresh=args.fresh,
-            with_github=True,  # the manual burst mirrors a dev burst
-        )
+        # the hand-run burst is a turn of its own: the operator's, not a tick's
+        with turn_span(task_id, "work", slug):
+            outcome = execute_burst(
+                stores,
+                task,
+                repo,
+                prompt,
+                mode=args.mode,
+                image=args.image,
+                model=args.model,  # each None → the dev role row (D5)
+                max_budget_usd=args.budget,
+                max_turns=args.max_turns,
+                fresh=args.fresh,
+                with_github=True,  # the manual burst mirrors a dev burst
+            )
     except (GitHubAuthError, RoleError, RegistryError, ArchiveError) as exc:
         # RegistryError: the hand-run verb met the registry wall — on the service
         # ledger a task names a registered product (#90). ArchiveError: the
@@ -987,7 +989,9 @@ def _run_burst(args: argparse.Namespace) -> int:
         # refusals a person reads, not stacks they decipher.
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    trace.get_tracer_provider().shutdown()  # type: ignore[attr-defined]
+    finally:
+        # a refused burst's trace is the one worth reading, so it is flushed too
+        trace.get_tracer_provider().shutdown()  # type: ignore[attr-defined]
     return outcome.exit_code
 
 

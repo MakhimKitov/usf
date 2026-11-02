@@ -20,6 +20,8 @@ import requests
 
 from secret_refs import SecretError, SecretResolver
 
+from control_plane.telemetry import step_in_trace
+
 GITHUB_API = "https://api.github.com"
 
 APP_ID = "GITHUB_APP_ID"
@@ -125,13 +127,15 @@ def _check(send: Callable[[], Any], what: str) -> Any:
     """Make the call and read it: a transport failure (no response — DNS, a
     dropped link, a timeout) and a bad status are the same GitHubAuthError to
     the caller, which retries next tick instead of dying (E6)."""
-    try:
-        response = send()
-    except requests.RequestException as exc:
-        raise GitHubAuthError(f"{what} failed: {exc.__class__.__name__}: {str(exc)[:300]}") from exc
-    if response.status_code >= 300:
-        raise GitHubAuthError(f"{what} failed: HTTP {response.status_code} {response.text[:300]}")
-    return response.json()
+    with step_in_trace("github.request", **{"github.operation": what}) as span:
+        try:
+            response = send()
+        except requests.RequestException as exc:
+            raise GitHubAuthError(f"{what} failed: {exc.__class__.__name__}: {str(exc)[:300]}") from exc
+        span.set_attribute("http.response.status_code", response.status_code)
+        if response.status_code >= 300:
+            raise GitHubAuthError(f"{what} failed: HTTP {response.status_code} {response.text[:300]}")
+        return response.json()
 
 
 def discover_installation(

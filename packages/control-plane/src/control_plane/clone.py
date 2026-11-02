@@ -37,6 +37,8 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
+from control_plane.telemetry import step_in_trace
+
 
 class CloneError(RuntimeError):
     """The platform clone could not be created or synced."""
@@ -112,27 +114,30 @@ def prepare_clone(
     origin's default branch — or ``ref`` (a sha: reviewer bursts check out the
     PR head, detached). Returns its path. ``url`` overrides the origin (tests
     use file:// origins)."""
-    clone = tree_dir(clones_root, slug, issue_number)
-    origin = url or f"https://github.com/{slug}.git"
-    auth = _auth_config(token) if url is None else []
-    if not (clone / ".git").is_dir():
-        cache = prepare_cache(clones_root, slug, token, url)
-        shutil.rmtree(clone, ignore_errors=True)  # a tree a crash cut short
-        clone.parent.mkdir(parents=True, exist_ok=True)
-        with _locked(clones_root, slug):
-            _git(["clone", "--quiet", "--no-checkout", str(cache), str(clone)])  # local: hardlinks
-        _git(["remote", "set-url", "origin", origin], cwd=clone)
-    _git([*auth, "fetch", "--quiet", "--prune", "origin"], cwd=clone)
-    _git([*auth, "remote", "set-head", "origin", "--auto"], cwd=clone)
-    _git(["reset", "--hard", "--quiet"], cwd=clone)  # clean tree so checkout can't conflict
-    if ref:
-        _git(["checkout", "--quiet", "--detach", ref], cwd=clone)
-    else:
-        default_ref = _git(["rev-parse", "--abbrev-ref", "origin/HEAD"], cwd=clone, capture=True)
-        branch = default_ref.split("/", 1)[1]
-        _git(["checkout", "--quiet", "-B", branch, default_ref], cwd=clone)
-    _git(["clean", "-fdq"], cwd=clone)  # ignored files survive (warm .venv)
-    return clone
+    with step_in_trace("clone.sync", **{"task.repository": slug, "clone.ref": ref or "default"}) as span:
+        clone = tree_dir(clones_root, slug, issue_number)
+        origin = url or f"https://github.com/{slug}.git"
+        auth = _auth_config(token) if url is None else []
+        fresh = not (clone / ".git").is_dir()
+        span.set_attribute("clone.fresh", fresh)  # a task's first burst syncs cold (H3)
+        if fresh:
+            cache = prepare_cache(clones_root, slug, token, url)
+            shutil.rmtree(clone, ignore_errors=True)  # a tree a crash cut short
+            clone.parent.mkdir(parents=True, exist_ok=True)
+            with _locked(clones_root, slug):
+                _git(["clone", "--quiet", "--no-checkout", str(cache), str(clone)])  # local: hardlinks
+            _git(["remote", "set-url", "origin", origin], cwd=clone)
+        _git([*auth, "fetch", "--quiet", "--prune", "origin"], cwd=clone)
+        _git([*auth, "remote", "set-head", "origin", "--auto"], cwd=clone)
+        _git(["reset", "--hard", "--quiet"], cwd=clone)  # clean tree so checkout can't conflict
+        if ref:
+            _git(["checkout", "--quiet", "--detach", ref], cwd=clone)
+        else:
+            default_ref = _git(["rev-parse", "--abbrev-ref", "origin/HEAD"], cwd=clone, capture=True)
+            branch = default_ref.split("/", 1)[1]
+            _git(["checkout", "--quiet", "-B", branch, default_ref], cwd=clone)
+        _git(["clean", "-fdq"], cwd=clone)  # ignored files survive (warm .venv)
+        return clone
 
 
 def prune_trees(clones_root: Path, slug: str, finished: Callable[[int], bool]) -> list[int]:

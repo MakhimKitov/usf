@@ -5,6 +5,8 @@ description = "The burst worker: runs one work burst inside the dev container. S
 requires-python = ">=3.12"
 dependencies = [
     "claude-agent-sdk>=0.2.175",
+    "opentelemetry-sdk>=1.27",
+    "opentelemetry-exporter-otlp-proto-http>=1.27",
     "session-volume",
     "structlog>=26.1.0",
 ]

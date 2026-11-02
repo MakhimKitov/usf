@@ -43,7 +43,7 @@ from control_plane.subscriptions import (
     pick_capacity,
     rate_limited_until,
 )
-from control_plane.telemetry import burst_span
+from control_plane.telemetry import burst_span, step, traceparent_of
 from control_plane.volume import HarvestOutcome, Snapshot, fold_artifacts
 
 log = structlog.get_logger()
@@ -391,10 +391,7 @@ def execute_burst(
     # the CAS discipline retires.
     stores.ledger.create_task(task)
     entered = (task.status, task.claimed_by)  # what the session write compares against
-    with burst_span(task.task_id, burst_id, role, kind, model=model, parent=parent) as (
-        span,
-        traceparent,
-    ):
+    with burst_span(task.task_id, burst_id, role, kind, model=model, parent=parent) as (span, _):
         context = span.get_span_context()
         # Both halves, because a successor's span link needs both (B1). The lookup
         # TO-BE §12 describes turns out to cost nothing: the parent row is already
@@ -418,7 +415,6 @@ def execute_burst(
             max_turns=max_turns,
             model=model,
             effort=effort,
-            traceparent=traceparent,
             github_token=github_token,
             git_user_name=git_name,
             git_user_email=git_email,
@@ -452,8 +448,14 @@ def execute_burst(
         # phase one (G1): the volume, filled from the parent node. The runner owns
         # it because *where* those bytes live is the runner's — a directory here,
         # an init container's emptyDir on a cluster.
-        runner.materialize(spec, Snapshot.of(parent))
-        exit_code = runner.run(spec, log_path=log_path, heartbeat=beat if heartbeat is not None else None)
+        with step("burst.materialize"):
+            runner.materialize(spec, Snapshot.of(parent))
+        # The box is handed *this* span's context, not the burst's: the worker's
+        # span and the CLI's tree under it then sit inside the container's own
+        # lifetime, and the time before the first of them is the box starting.
+        with step("burst.run", **{"burst.runner": type(runner).__name__}) as run_span:
+            spec.traceparent = traceparent_of(run_span)
+            exit_code = runner.run(spec, log_path=log_path, heartbeat=beat if heartbeat is not None else None)
         burst.exit_code = exit_code
         if fenced:
             # killed, not failed (E3): the lease was lost, the org stopped or the
@@ -466,8 +468,11 @@ def execute_burst(
 
         # phase three: what the burst left comes back as bytes, and only here —
         # in the control plane, with the credentials for it — does it become rows
-        artifacts = runner.collect(spec)
-        outcome = fold_artifacts(artifacts, burst, stores.ledger)
+        with step("burst.collect"):
+            artifacts = runner.collect(spec)
+        with step("burst.fold") as fold_span:
+            outcome = fold_artifacts(artifacts, burst, stores.ledger)
+            fold_span.set_attribute("burst.violations", outcome.violation_count)
         if burst.model:
             span.set_attribute("burst.model", burst.model)  # resolved beats requested
         stores.ledger.finish_burst(burst)

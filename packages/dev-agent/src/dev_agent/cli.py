@@ -25,6 +25,7 @@ from dev_agent.burst import run_burst_sync
 from dev_agent.env import BurstEnv, EnvError
 from dev_agent.log import configure_logging
 from dev_agent.probes import walls
+from dev_agent.tracing import configure as configure_tracing
 
 log = structlog.get_logger()
 
@@ -94,7 +95,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "walls":
         return walls(env)  # the box tries its own walls (G6); no engine, no key
 
-    result = run_burst_sync(env)
+    tracer_provider = configure_tracing()  # None unless the burst's telemetry is on (B2)
+    try:
+        result = run_burst_sync(env, tracer_provider)
+    finally:
+        if tracer_provider is not None:
+            tracer_provider.shutdown()  # the span ends with the burst; flush it before the box does
     log.info(
         "burst done",  # task and burst ids come from the bound context, not from here
         session=result.session_id,
