@@ -1,10 +1,15 @@
-"""Tracing per ARCHITECTURE.md §9: trace = one burst, task is an attribute.
+"""Tracing per ARCHITECTURE.md §9: trace = one turn, task is an attribute.
 
-The control plane opens the burst span and injects its W3C ``traceparent`` into
-the container env; Claude Code (SDK mode) adopts it, nesting its own span tree
-under ours. Export is OTLP when ``OTEL_EXPORTER_OTLP_ENDPOINT`` is set, console
-when ``CONTROL_PLANE_TRACE_CONSOLE=1``, otherwise spans exist only to mint
-trace context (no exporter) — correlation IDs cost nothing either way.
+A turn is what the platform does for one task in one go — sync the clone, read
+GitHub, run at most one burst, act on what it left — so a trace holds exactly
+one burst and everything the platform did around it. `turn_span` is its root,
+`step` a child per stage, and `burst_span` the burst inside it. The control
+plane injects the ``burst.run`` step's W3C ``traceparent`` into the container
+env; the worker in the box opens its own span under it, and Claude Code (SDK
+mode) nests its span tree under the worker's. Export is OTLP when
+``OTEL_EXPORTER_OTLP_ENDPOINT`` is set, console when
+``CONTROL_PLANE_TRACE_CONSOLE=1``, otherwise spans exist only to mint trace
+context (no exporter) — correlation IDs cost nothing either way.
 
 A task can run for days, so it is deliberately *not* a trace. What holds the
 bursts of one task together is a **span link** per burst to the burst it resumed
@@ -45,8 +50,11 @@ _initialized = False
 AGENT_OTLP_ENDPOINT_ENV = "DEV_AGENT_OTLP_ENDPOINT"
 
 # The CLI's tracing is beta: "span names and attributes may change between
-# releases". This is the version the span nesting was verified against.
-VERIFIED_CLI_VERSION = "2.1.235"
+# releases". This is the version the span nesting was verified against — live,
+# turn → burst.run → agent.burst → claude_code.interaction in one trace, with the
+# wall's event joined to the CLI's tool span (OBSERVABILITY.md). A new engine
+# (`uv.lock`, #120) is re-verified the same way before this moves.
+VERIFIED_CLI_VERSION = "2.1.314"
 
 
 def init_telemetry() -> None:
@@ -68,6 +76,57 @@ def init_telemetry() -> None:
 def traceparent_of(span: trace.Span) -> str:
     ctx = span.get_span_context()
     return f"00-{ctx.trace_id:032x}-{ctx.span_id:016x}-{ctx.trace_flags:02x}"
+
+
+@contextmanager
+def turn_span(task_id: str, kind: str, repository: str | None = None) -> Iterator[trace.Span]:
+    """The root of one turn: everything the platform does for one task in one go.
+
+    A trace is a turn, not a tick. A tick that only polls GitHub and finds
+    nothing to do would be a trace a minute of nothing — the same reason
+    jarvis-core keeps `/health` out of its traces — so only the work a tick
+    does for a task is traced, and the polls around it are not.
+    """
+    tracer = trace.get_tracer(SERVICE_NAME)
+    attributes = {"task.id": task_id, "burst.kind": kind}
+    if repository:
+        attributes["task.repository"] = repository
+    with tracer.start_as_current_span("turn", attributes=attributes) as span:
+        ctx = span.get_span_context()
+        tokens = structlog.contextvars.bind_contextvars(
+            trace_id=f"{ctx.trace_id:032x}", task_id=task_id
+        )
+        try:
+            yield span
+        finally:
+            structlog.contextvars.reset_contextvars(**tokens)
+
+
+@contextmanager
+def step(name: str, **attributes: str | int | float | bool) -> Iterator[trace.Span]:
+    """One stage of a turn as a child span of whatever span is current.
+
+    An exception inside marks the span as an error and propagates — the SDK's
+    own default, kept because a failed stage is the one a reader looks for.
+    """
+    tracer = trace.get_tracer(SERVICE_NAME)
+    with tracer.start_as_current_span(name, attributes=attributes) as span:
+        yield span
+
+
+@contextmanager
+def step_in_trace(name: str, **attributes: str | int | float | bool) -> Iterator[trace.Span]:
+    """`step`, but only inside a trace that is already open; otherwise nothing.
+
+    For calls made both inside a turn and outside one — GitHub's, above all.
+    The observation poll reads GitHub every tick, and each read as a root span
+    of its own would bury the turns under a trace per request.
+    """
+    if not trace.get_current_span().is_recording():
+        yield trace.INVALID_SPAN
+        return
+    with step(name, **attributes) as span:
+        yield span
 
 
 def link_to_burst(parent: BurstRecord) -> trace.Link | None:
@@ -120,12 +179,15 @@ def agent_telemetry_env(task_id: str, burst_id: str, role: str, kind: str) -> di
 
     Empty unless `DEV_AGENT_OTLP_ENDPOINT` names a collector the *container* can
     reach: no endpoint, no telemetry variables, and the box is exactly what it was.
+    The same variables turn on the worker's own span (`dev_agent.tracing`): one
+    declaration, two emitters in the box, one endpoint.
 
     Two signals, and the third one's absence is the interesting part:
 
-    * **traces** — the point of this. The CLI adopts the `TRACEPARENT` the runner
-      already injects, so `claude_code.interaction` and its children land inside the
-      burst span instead of in a trace of their own.
+    * **traces** — the point of this. The runner injects the `burst.run` step's
+      `TRACEPARENT`, the worker opens `agent.burst` under it, and the SDK hands the
+      CLI that span's context — so `claude_code.interaction` and its children land
+      inside the turn's trace instead of in a trace of their own.
     * **log events** — `tool_result`, `api_request`, `user_prompt`: tool visibility
       *is* the experiment's dataset (ARCHITECTURE §9). The violations ledger is still
       derived control-plane-side from the volume, never from these — an alerting
@@ -180,7 +242,9 @@ def burst_span(
     model: str | None = None,
     parent: BurstRecord | None = None,
 ) -> Iterator[tuple[trace.Span, str]]:
-    """Open the burst's root span; yields (span, traceparent-for-the-container).
+    """Open the burst's span — the turn's child, or a root outside a turn;
+    yields (span, its traceparent). The box is handed its `burst.run` step's
+    context instead (`execute_burst`), so the traceparent here is the burst's own.
 
     ``parent`` is the burst this one resumed from — the leaf of the task's session
     tree, which the caller is already holding because it materialized the volume

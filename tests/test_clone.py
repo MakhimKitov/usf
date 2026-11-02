@@ -241,3 +241,22 @@ def test_every_sync_sweeps_what_the_ledger_says_is_done(tmp_path, monkeypatch):
     assert sorted(p.name for p in (clones / "tasks" / "owner__product").iterdir()) == ["2"]
     head = _git_out(origin, "rev-parse", "HEAD")
     assert _git_out(sync_clone_ref(task, head), "rev-parse", "HEAD") == head
+
+
+def test_a_sync_inside_a_turn_is_a_step_and_says_whether_it_was_cold(tmp_path, spans):
+    """A task's first burst syncs cold and every later one warm (H3) — the
+    difference is most of the time before a burst starts, so the span says it."""
+    from control_plane.telemetry import turn_span
+
+    origin = _origin(tmp_path)
+    clones = tmp_path / "clones"
+    with turn_span("owner/product#9", "work"):
+        prepare_clone(clones, "owner/product", 9, url=origin.as_uri())
+        prepare_clone(clones, "owner/product", 9, url=origin.as_uri())
+    syncs = [span for span in spans.get_finished_spans() if span.name == "clone.sync"]
+    assert [span.attributes["clone.fresh"] for span in syncs] == [True, False]
+    assert syncs[0].attributes["task.repository"] == "owner/product"
+
+    # and outside a turn — the CLI's own syncs — nothing is traced
+    prepare_clone(clones, "owner/product", 9, url=origin.as_uri())
+    assert len([span for span in spans.get_finished_spans() if span.name == "clone.sync"]) == 2

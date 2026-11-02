@@ -45,7 +45,7 @@ def test_each_burst_gets_its_own_trace():
         pass
     with burst_span("42", "b2", "dev", "review") as (_, tp2):
         pass
-    assert tp1.split("-")[1] != tp2.split("-")[1]  # trace ids differ (trace = burst)
+    assert tp1.split("-")[1] != tp2.split("-")[1]  # outside a turn, each burst is a root of its own
 
 
 # --- lineage across traces (B1) ---
@@ -151,3 +151,61 @@ def test_a_nested_span_restores_the_outer_binding():
         with burst_span("owner/product#42", "inner", "dev", "review"):
             assert structlog.contextvars.get_contextvars()["burst_id"] == "inner"
         assert structlog.contextvars.get_contextvars() == outer
+
+
+# --- the turn: one trace through the platform and into the box ---
+
+
+def _by_name(exporter):
+    return {span.name: span for span in exporter.get_finished_spans()}
+
+
+def test_a_turn_is_the_root_and_the_burst_sits_inside_it(spans):
+    from control_plane.telemetry import step, turn_span
+
+    with turn_span("owner/product#42", "work", "owner/product"):
+        with burst_span("owner/product#42", "b1", "dev", "work"):
+            with step("burst.run"):
+                pass
+    named = _by_name(spans)
+    turn, burst, run = named["turn"], named["burst"], named["burst.run"]
+    assert turn.parent is None
+    assert burst.parent.span_id == turn.context.span_id
+    assert run.parent.span_id == burst.context.span_id
+    assert {turn.context.trace_id, burst.context.trace_id, run.context.trace_id} == {turn.context.trace_id}
+    assert turn.attributes["task.id"] == "owner/product#42"
+    assert turn.attributes["task.repository"] == "owner/product"
+
+
+def test_the_turn_binds_its_trace_into_the_log_context(spans):
+    from control_plane.telemetry import turn_span
+
+    with turn_span("owner/product#42", "work") as span:
+        bound = structlog.contextvars.get_contextvars()
+        assert bound["trace_id"] == f"{span.get_span_context().trace_id:032x}"
+        assert bound["task_id"] == "owner/product#42"
+    assert "trace_id" not in structlog.contextvars.get_contextvars()
+
+
+def test_a_step_outside_a_trace_is_nothing(spans):
+    """The poll reads GitHub every tick; a span per read with no turn around it
+    would be a root per request, burying the turns."""
+    from control_plane.telemetry import step_in_trace
+
+    with step_in_trace("github.request") as span:
+        assert not span.is_recording()
+    assert spans.get_finished_spans() == ()
+
+
+def test_a_failed_step_is_marked_and_still_raises(spans):
+    import pytest
+    from control_plane.telemetry import step, turn_span
+    from opentelemetry.trace import StatusCode
+
+    with pytest.raises(RuntimeError):
+        with turn_span("owner/product#42", "work"):
+            with step("clone.sync"):
+                raise RuntimeError("origin unreachable")
+    named = _by_name(spans)
+    assert named["clone.sync"].status.status_code == StatusCode.ERROR
+    assert named["turn"].status.status_code == StatusCode.ERROR

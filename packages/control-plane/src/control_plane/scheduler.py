@@ -94,6 +94,7 @@ from control_plane.testing import (
     resolve_citations,
     resolve_test_env,
 )
+from control_plane.telemetry import turn_span
 
 log = structlog.get_logger()
 
@@ -608,6 +609,14 @@ class Scheduler:
             return None
 
     def run_task_burst(self, task: TaskRecord, capacity: Capacity | None = None) -> None:
+        """One turn for the task: at most one burst, and what the platform does
+        around it. The turn is the trace (§9), so a turn that ends before any
+        burst — a clone that would not sync, a review that vanished — is still
+        one a reader can find."""
+        with turn_span(task.task_id, task.next_burst_kind or WORK, self.api.repo):
+            self._run_turn(task, capacity)
+
+    def _run_turn(self, task: TaskRecord, capacity: Capacity | None) -> None:
         number = task.issue_number
         kind = task.next_burst_kind or WORK
         # the fleet picks once for the whole tick (H1) and hands it down; the

@@ -205,3 +205,40 @@ def test_a_fenced_burst_is_killed_and_a_crashed_one_failed(tmp_path):
 
     crashed = execute_burst(stores, task, repo, "fix", runner=CrashedRunner(archive=stores.archive), heartbeat=lambda: True)
     assert (crashed.burst.status, crashed.exit_code, crashed.succeeded) == (BurstStatus.FAILED, 137, False)
+
+
+# --- the control plane's half of one end-to-end trace ---
+
+
+def test_one_trace_runs_from_the_turn_into_the_box(tmp_path, spans):
+    """The turn, the burst and its four phases — and the context handed to the
+    box names the `burst.run` step, so the worker's span and the CLI's tree
+    under it sit inside the container's lifetime rather than beside it."""
+    from control_plane.runner import burst_env
+    from control_plane.telemetry import turn_span
+    from dev_agent.env import TRACEPARENT
+
+    stores, repo = _rig(tmp_path)
+    seen = {}
+
+    class Recording(ResultRunner):
+        def run(self, spec, log_path=None, heartbeat=None):
+            seen["handed"] = burst_env(spec)[TRACEPARENT]
+            return super().run(spec, log_path, heartbeat)
+
+    with turn_span(f"{REPOSITORY}#7", "work", REPOSITORY):
+        outcome = execute_burst(stores, _task(), repo, "fix", runner=Recording(archive=stores.archive))
+
+    named = {span.name: span for span in spans.get_finished_spans()}
+    burst = named["burst"]
+    assert burst.parent.span_id == named["turn"].context.span_id
+    for phase in ("burst.materialize", "burst.run", "burst.collect", "burst.fold"):
+        assert named[phase].parent.span_id == burst.context.span_id, phase
+    run = named["burst.run"]
+    _, trace_id, span_id, _ = seen["handed"].split("-")
+    assert (trace_id, span_id) == (f"{run.context.trace_id:032x}", f"{run.context.span_id:016x}")
+    # the ledger keeps the burst span's pair: a successor's link names the burst, not its run
+    assert (outcome.burst.trace_id, outcome.burst.span_id) == (
+        f"{burst.context.trace_id:032x}", f"{burst.context.span_id:016x}"
+    )
+    assert named["burst.fold"].attributes["burst.violations"] == 0

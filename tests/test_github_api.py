@@ -314,3 +314,36 @@ def test_contents_errors_other_than_404_still_raise():
     )
     with pytest.raises(GitHubApiError, match="reading TESTING.md.*503"):
         api.read_file("TESTING.md")
+
+
+# --- the GitHub call as a span inside a turn ---
+
+
+def test_a_call_inside_a_turn_is_a_span_that_names_the_call_and_never_the_token(spans):
+    from control_plane.telemetry import turn_span
+
+    api, _ = _api({("GET", "/repos/owner/product/issues/7"): FakeResponse(200, payload={"number": 7, "title": "t", "body": "", "labels": [], "state": "open"})})
+    api.get_issue(7)  # outside a turn: the poll's shape, untraced
+    assert spans.get_finished_spans() == ()
+
+    with turn_span("owner/product#7", "work"):
+        api.get_issue(7)
+    (call,) = [span for span in spans.get_finished_spans() if span.name == "github.request"]
+    assert call.attributes["github.operation"] == "reading issue #7"
+    assert call.attributes["http.request.method"] == "GET"
+    assert call.attributes["url.path"] == "/repos/owner/product/issues/7"
+    assert call.attributes["http.response.status_code"] == 200
+    assert "ghs_test" not in repr(dict(call.attributes))
+
+
+def test_a_refused_call_marks_its_span(spans):
+    from control_plane.telemetry import turn_span
+    from opentelemetry.trace import StatusCode
+
+    api, _ = _api({("GET", "/repos/owner/product/issues/7"): FakeResponse(500, text="boom")})
+    with pytest.raises(GitHubApiError):
+        with turn_span("owner/product#7", "work"):
+            api.get_issue(7)
+    (call,) = [span for span in spans.get_finished_spans() if span.name == "github.request"]
+    assert call.status.status_code == StatusCode.ERROR
+    assert call.attributes["http.response.status_code"] == 500

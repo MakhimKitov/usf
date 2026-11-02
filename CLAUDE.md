@@ -753,6 +753,18 @@ collector looks exactly like one with none. Point both at the same collector by 
 different names, and if nothing arrives, `CLAUDE_CODE_OTEL_DIAG_STDERR=1` in the
 container env makes the CLI say why.
 
+**One trace per turn, end to end.** A turn is what the platform does for one task
+in one go, so its trace runs through all three processes: the control plane's
+`turn` → its steps (`clone.sync`, `github.request` — only inside a turn, so the
+polls stay untraced) → `burst` → `burst.materialize` / `burst.run` /
+`burst.collect` / `burst.fold`; the box is handed the `burst.run` step's
+`TRACEPARENT`, the worker opens `agent.burst` under it (`dev_agent.tracing`: how
+the run ended, a `wall.denied` event per denial), and the SDK hands the CLI that
+span's context, so `claude_code.*` nests under the worker. The two endpoints above
+are the only switches — the worker reads the same telemetry env as the CLI, and
+neither process ships a viewer. Verified live on CLI 2.1.314
+(`VERIFIED_CLI_VERSION`); OBSERVABILITY.md has the measured tree.
+
 What a burst emits is decided in `control_plane.telemetry.agent_telemetry_env`, with
 the reason for each choice next to it: traces and log events yes, metrics no (the
 ledger is the metrics store — TO-BE §12), tool arguments yes, tool and API bodies no.

@@ -1625,3 +1625,31 @@ def test_daily_quota_counts_only_our_own_bursts(rig):
     stores.ledger.upsert_task(_task(1, status=TaskStatus.CLAIMED))
     picked = scheduler.pick_next()
     assert picked is not None and picked.task_id == tid(1)
+
+
+def test_a_turn_is_one_trace_and_a_quiet_tick_is_none(rig, spans, monkeypatch):
+    """A tick that only polls is not traced — a trace a minute of nothing — and
+    the tick that works a task is one trace, rooted at the turn, with the burst
+    started inside it."""
+    from opentelemetry import trace
+
+    scheduler, api, stores, spawned, fake_execute = rig
+    scheduler.tick()
+    assert spans.get_finished_spans() == ()
+
+    current = []
+
+    def inside(*args, **kwargs):
+        current.append(trace.get_current_span().name)
+        return fake_execute(*args, **kwargs)
+
+    monkeypatch.setattr(sched_mod, "execute_burst", inside)
+    api.ready_issues = [_issue()]
+    api.issues[1] = _issue()
+    api.open_prs = [_pr()]
+    scheduler.tick()
+    assert current == ["turn"]
+    (turn,) = [span for span in spans.get_finished_spans() if span.name == "turn"]
+    assert turn.parent is None
+    assert turn.attributes["task.id"] == tid(1)
+    assert turn.attributes["burst.kind"] == "work"

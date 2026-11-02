@@ -361,6 +361,8 @@ version = "0.1.0"
 source = { editable = "packages/dev-agent" }
 dependencies = [
     { name = "claude-agent-sdk" },
+    { name = "opentelemetry-exporter-otlp-proto-http" },
+    { name = "opentelemetry-sdk" },
     { name = "session-volume" },
     { name = "structlog" },
 ]
@@ -368,6 +370,8 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "claude-agent-sdk", specifier = ">=0.2.175" },
+    { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.27" },
+    { name = "opentelemetry-sdk", specifier = ">=1.27" },
     { name = "session-volume", editable = "packages/session-volume" },
     { name = "structlog", specifier = ">=26.1.0" },
 ]

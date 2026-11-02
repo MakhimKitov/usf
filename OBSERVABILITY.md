@@ -20,7 +20,7 @@ container is told nothing about telemetry at all.
 | Variable | Set by | Who pushes | Rig value |
 |---|---|---|---|
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | the control plane's own env | the control plane | `http://localhost:4318` |
-| `DEV_AGENT_OTLP_ENDPOINT` | the control plane, injected per burst | each burst's `claude` CLI | `http://host.docker.internal:4318` |
+| `DEV_AGENT_OTLP_ENDPOINT` | the control plane, injected per burst | each burst's worker and its `claude` CLI | `http://host.docker.internal:4318` |
 
 The second string is the one that gets it wrong. `localhost` inside the box is the
 box, and **the CLI drops export failures silently** — a burst pointed at nothing
@@ -37,22 +37,27 @@ SDK's message channel.
 
 `trace_id` is the join, and it reaches every signal without a call site passing it:
 
-- **The trace** is one burst (`ARCHITECTURE.md` §9). The control plane opens the
-  `burst` span, injects its `traceparent`, and the CLI nests its own tree under it —
-  so a burst's trace holds both processes' spans. The ledger records the pair
-  `(trace_id, span_id)`, because the link a *successor* burst makes names a span
-  (B1).
-- **Control-plane log lines** carry `trace_id` / `burst_id` / `task_id` for the
-  span's lifetime — bound in `burst_span`, so every line written during a burst has
-  them.
-- **Agent log events** carry `trace_id` *and* `span_id`, the latter being the burst
-  span's own id: the CLI parents its events to the traceparent it was given. So a log
+- **The trace** is one turn (`ARCHITECTURE.md` §9): what the platform did for one
+  task in one go, holding at most one burst. The control plane opens `turn`, a span
+  per step and the `burst` span, and injects its `burst.run` step's `traceparent`
+  into the box; the worker opens `agent.burst` under it, and the CLI nests its own
+  tree under the worker's — three processes, one trace, one root. The ledger records
+  the *burst* span's pair `(trace_id, span_id)`, because the link a *successor*
+  burst makes names a span (B1).
+- **Control-plane log lines** carry `trace_id` / `task_id` for the turn's lifetime
+  (bound in `turn_span`) and `burst_id` as well for the burst's (`burst_span`), so
+  every line written during a turn has them.
+- **Agent log events** carry `trace_id` *and* `span_id` — the span they happened in:
+  `claude_code.interaction` for most, the tool's span for a `tool_decision`, and
+  `agent.burst` for the few the CLI writes before its interaction opens (measured on
+  2.1.314; on 2.1.235 every event carried the span the CLI was handed). So a log
   record points at a span, not just a trace.
 - **When there is no span there is still `burst.id`.** `OTEL_RESOURCE_ATTRIBUTES`
   stamps `task.id` / `burst.id` / `burst.role` / `burst.kind` on every signal the CLI
-  emits, which is what makes the one standalone `llm_request` (B2 — the quick
-  haiku call, `llm_request.context = standalone`) attributable at all: it lands
-  outside the interaction tree, in a trace of its own.
+  and the worker emit. On 2.1.235 that is what made the quick haiku call attributable
+  at all — a standalone `llm_request` (`llm_request.context = standalone`), outside
+  the interaction tree, in a trace of its own; on 2.1.314 the same call was measured
+  inside the interaction (`llm_request.context = interaction`).
 - **The ledger** holds the same ids as columns, so "the trace for the burst that
   opened PR 41" is a query and not a search.
 
@@ -97,37 +102,64 @@ trace_id:"7caf15929cf77e014997da6bf8395979" | sort by (_time)
 ### What a burst looks like in Phoenix
 
 Everything lands in the `default` project — nothing sets a Phoenix project name — and
-each burst is one trace, rooted at the control plane's own `burst` span:
+each turn is one trace, rooted at the control plane's own `turn` span. A hand-run
+burst on CLI 2.1.314 (`control-plane burst`, one Bash call and one read the wall
+denied), as Phoenix holds it:
 
 ```
-burst                              9.5s   ← the control plane's span: the whole burst
-  claude_code.interaction          5.9s   ← the CLI adopted our traceparent here
-    claude_code.llm_request        2.7s   LLM   model, finish_reason, ttft_ms, usage
-    claude_code.tool             41.0ms   TOOL  tool_name=Bash, full_command=…, tool_use_id
-      claude_code.tool.blocked_on_user     6ms
-      claude_code.tool.execution          35ms  TOOL  success=true
-    claude_code.llm_request        3.3s   LLM
+turn                                 9.9s   ← the control plane: one task, one go
+  github.request                   512ms   listing installations       ← the burst's GitHub
+  github.request                   593ms   minting installation token  ← token, downscoped (D2)
+  burst                              8.7s   ← the burst: the span the ledger records
+    burst.materialize                0ms   ← the volume (a first burst: nothing to restore)
+    burst.run                        8.7s   ← the container's lifetime; the box is handed its context
+      agent.burst                    6.9s   ← the worker in the box: how the run ended, wall.denied
+        claude_code.interaction      4.6s   ← the CLI, under the worker
+          claude_code.llm_request  855ms   LLM   claude-haiku-5-5
+          claude_code.llm_request    3.1s   LLM   claude-sonnet-5
+          claude_code.tool          51ms   TOOL  tool_name=Bash, full_command=…, tool_use_id
+            claude_code.tool.blocked_on_user     8ms
+            claude_code.tool.execution          43ms
+          claude_code.tool           1ms   TOOL  tool_name=Read — the call the wall denied
+            claude_code.tool.blocked_on_user     1ms
+          claude_code.llm_request    1.3s   LLM
+    burst.collect                   21ms   ← what the burst left, out of the volume
+    burst.fold                       1ms   ← into ledger rows: burst.violations=1
 ```
 
-Four things worth knowing when you look:
+A scheduled turn holds more of the platform: `clone.sync` (`clone.fresh` says
+whether it was the task's cold first sync, H3) and the GitHub calls that build the
+prompt before the burst and act on its result after it — the PR lookup, the review
+requests. A tick that only polls GitHub is not traced, and a GitHub call is a span
+only inside a turn: a trace a minute of nothing would bury the turns.
 
-- **The gap on the left is the platform.** `burst` starts ~2.7s before the first
-  CLI span — container start, clone, minting a GitHub token. Platform overhead and
-  agent work are separated for free, which is most of why the burst span exists.
+Five things worth knowing when you look:
+
+- **Every gap has a name now.** Before `burst`, the turn's own steps (1.2s here,
+  the token mint). Inside `burst.run`: 1.3s before `agent.burst` is the container
+  starting, 1.3s before `claude_code.interaction` is the SDK starting the CLI, 0.9s
+  after it is the SDK closing the CLI, and 0.5s after the worker is the container
+  going away. The CLI tree alone used to leave all of that as one unexplained gap.
+- **A wall shows twice and joins once.** The denial is a `wall.denied` event on
+  `agent.burst` — tool, reason, `tool.use_id` — and the CLI's `claude_code.tool`
+  span for the same call carries the same id as `tool_use_id`. The violations
+  ledger stays the record (`burst.fold` counts what it folded); the event is how a
+  reader finds the call in the tree.
 - **Tool arguments are there** (`full_command`, `file_path`), because tool visibility
   *is* the experiment's dataset (§9). Tool and API *bodies* are not.
 - **`tool_use_id` is on both tool spans**, which is the handle B6 (#68) resolves a
   test report's citation against — visible here before anything reads it.
 - **Span links are not shown, at all.** Phoenix's span model has no links field, so
   B1's link to the predecessor burst is exported and then dropped. Lineage is
-  readable anyway: `burst.resumed_from` is an attribute on the root span, which is
-  the reason B1 recorded it as one as well as as a link. The authority is the
+  readable anyway: `burst.resumed_from` is an attribute on the `burst` span, which
+  is the reason B1 recorded it as one as well as as a link. The authority is the
   ledger's `resumed_from_burst_id`.
 
-One trace will look wrong and is not: a lone `claude_code.llm_request` with no parent
-and `llm_request.context = standalone`. That is the CLI's quick side-call, outside the
-interaction tree and in a trace of its own (B2) — attributable only by its `burst.id`,
-which is why `OTEL_RESOURCE_ATTRIBUTES` stamps every signal.
+On CLI 2.1.235 one trace looked wrong and was not: a lone `claude_code.llm_request`
+with no parent and `llm_request.context = standalone` — the CLI's quick side-call,
+outside the interaction tree and in a trace of its own (B2), attributable only by
+its `burst.id`. On 2.1.314 that call was measured inside the interaction; if it
+reappears on its own, that is what it is.
 
 ### What a burst looks like in VictoriaLogs
 

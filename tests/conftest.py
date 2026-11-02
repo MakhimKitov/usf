@@ -32,3 +32,23 @@ from control_plane.store import ARCHIVE_URL_ENV, LEDGER_DSN_ENV
 def isolated_stores_by_default(monkeypatch):
     monkeypatch.delenv(LEDGER_DSN_ENV, raising=False)
     monkeypatch.delenv(ARCHIVE_URL_ENV, raising=False)
+
+
+@pytest.fixture()
+def spans():
+    """What the control plane traced during the test, ended spans in order.
+
+    The process has one tracer provider (`init_telemetry` installs it once), so
+    each test adds its own in-memory exporter to it rather than a provider of
+    its own; the exporter is shut at teardown and takes nothing after.
+    """
+    from control_plane.telemetry import init_telemetry
+    from opentelemetry import trace
+    from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+    from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+
+    init_telemetry()
+    exporter = InMemorySpanExporter()
+    trace.get_tracer_provider().add_span_processor(SimpleSpanProcessor(exporter))
+    yield exporter
+    exporter.shutdown()

@@ -58,9 +58,11 @@ BASH_DEFAULT_TIMEOUT_MS = "BASH_DEFAULT_TIMEOUT_MS"
 BASH_MAX_TIMEOUT_MS = "BASH_MAX_TIMEOUT_MS"
 
 # Claude Code's own telemetry (B2). Set by the control plane, read by the CLI the
-# SDK drives — this package reads none of them, and doesn't need to: the SDK passes
-# the process environment to the CLI, and the CLI's exporter is its own. Named here
-# so the two sides can't drift, like everything else in this module.
+# SDK drives — the SDK passes the process environment to the CLI, and the CLI's
+# exporter is its own. The worker reads three of them too: the switch, the trace
+# exporter and the endpoint decide whether it traces itself (`dev_agent.tracing`),
+# so one declaration turns on both emitters in the box. Named here so the two
+# sides can't drift, like everything else in this module.
 #
 # Reference: code.claude.com/docs/en/monitoring-usage. Traces are beta and take two
 # switches, ENABLE_TELEMETRY plus ENHANCED_TELEMETRY_BETA; span names and attributes

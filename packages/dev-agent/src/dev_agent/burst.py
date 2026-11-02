@@ -28,8 +28,12 @@ from claude_agent_sdk import (
     query,
 )
 
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.trace import Span, Status, StatusCode
+
 from dev_agent.contract import build_system_prompt
 from dev_agent.env import BurstEnv
+from dev_agent.tracing import agent_span
 from dev_agent.walls import make_pre_tool_use_hook
 
 log = structlog.get_logger()
@@ -227,5 +231,31 @@ def write_result(env: BurstEnv, result: BurstResult) -> None:
     env.result_path.write_text(json.dumps(asdict(result), indent=2), encoding="utf-8")
 
 
-def run_burst_sync(env: BurstEnv) -> BurstResult:
-    return asyncio.run(run_burst(env))
+def run_burst_sync(env: BurstEnv, tracer_provider: TracerProvider | None = None) -> BurstResult:
+    """The burst, inside the worker's span when the burst's telemetry is on.
+
+    The span is opened here, around the event loop, because `asyncio.run`
+    starts its task in a copy of the current context: the span is then current
+    for everything the SDK does — the CLI it spawns is handed its context, and
+    the wall hook it calls back into can add to it.
+    """
+    with agent_span(tracer_provider, env) as span:
+        result = asyncio.run(run_burst(env))
+        describe(span, result)
+    return result
+
+
+def describe(span: Span, result: BurstResult) -> None:
+    """How the run ended, on the worker's span — the result file's own fields,
+    so the trace and the file the control plane folds cannot disagree."""
+    for key, value in (
+        ("burst.model", result.model),  # resolved by the CLI, so it beats the requested one
+        ("burst.session_id", result.session_id),
+        ("burst.num_turns", result.num_turns),
+        ("burst.cost_usd", result.total_cost_usd),
+        ("burst.subtype", result.subtype),
+    ):
+        if value is not None:
+            span.set_attribute(key, value)
+    if result.is_error:
+        span.set_status(Status(StatusCode.ERROR, result.subtype or result.error or "the engine reported an error"))
